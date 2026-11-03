@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Sun,
   TicketPercent,
+  UserCog,
   UtensilsCrossed,
   Users,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import { useMounted } from "@/lib/use-mounted";
 import type { Profile } from "@/types";
 
 const ProfileContext = createContext<Profile | null>(null);
+const SetProfileContext = createContext<(profile: Profile) => void>(() => {});
 
 /** Current staff profile. Only usable inside the panel shell. */
 export function useProfile() {
@@ -46,6 +48,9 @@ export function useProfile() {
   if (!profile) throw new Error("useProfile must be used inside PanelShell");
   return profile;
 }
+
+/** Replaces the profile shown in the shell, after the person edits their own account. */
+export const useSetProfile = () => use(SetProfileContext);
 
 type NavItem = {
   key: NavKey;
@@ -69,6 +74,7 @@ const NAV: NavItem[] = [
   { key: "cupons", href: "/admin/cupons", label: "Cupons", icon: TicketPercent },
   { key: "equipe", href: "/admin/equipe", label: "Equipe", icon: Users },
   { key: "loja", href: "/admin/configuracoes", label: "Loja", icon: Settings },
+  { key: "conta", href: "/admin/conta", label: "Minha conta", short: "Conta", icon: UserCog },
 ];
 
 /** The store logo set in the panel; the default brand icon until one is set. */
@@ -176,7 +182,8 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4" aria-label="Painel">
           {profile
-            ? nav.map((n) => (
+            ? // "Minha conta" opens from the name card at the bottom
+              nav.filter((n) => n.key !== "conta").map((n) => (
                 <Link
                   key={n.href}
                   href={n.href}
@@ -221,7 +228,9 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
       <div className="flex min-w-0 flex-col md:pl-20 lg:pl-0">
         <main id="conteudo" tabIndex={-1} className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] outline-none md:pb-0">
           {profile ? (
-            <ProfileContext value={profile}>{children}</ProfileContext>
+            <ProfileContext value={profile}>
+              <SetProfileContext value={setProfile}>{children}</SetProfileContext>
+            </ProfileContext>
           ) : loadError ? (
             <EmptyState
               icon={ShieldCheck}
@@ -500,15 +509,21 @@ function Initials({ profile }: { profile: Profile }) {
 
 function UserCard({ profile, onSignOut }: { profile: Profile; onSignOut: () => void }) {
   return (
-    <div className="mt-2 flex items-center gap-3 rounded-md px-2 py-2">
-      <Initials profile={profile} />
-      <div className="min-w-0 flex-1 leading-tight">
-        <p className="truncate text-sm font-semibold">{profile.full_name || profile.email}</p>
-        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          {profile.role === "admin" && <ShieldCheck className="size-3" />}
-          {profile.role === "admin" ? "Gerente" : "Funcionário"}
-        </p>
-      </div>
+    <div className="mt-2 flex items-center gap-1 rounded-md">
+      <Link
+        href="/admin/conta"
+        className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-2"
+        aria-label={`Minha conta: ${profile.full_name || profile.email}`}
+      >
+        <Initials profile={profile} />
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-sm font-semibold">{profile.full_name || profile.email}</p>
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            {profile.role === "admin" && <ShieldCheck className="size-3" />}
+            {profile.role === "admin" ? "Gerente" : "Funcionário"}
+          </p>
+        </div>
+      </Link>
       <button
         type="button"
         onClick={onSignOut}

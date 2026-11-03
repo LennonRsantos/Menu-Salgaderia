@@ -1,6 +1,6 @@
 import "server-only";
 import type { Profile } from "@/types";
-import { iso, query } from "./db";
+import { iso, query, transaction } from "./db";
 import { neonAuth } from "./neon-auth";
 
 type StaffRow = {
@@ -48,4 +48,39 @@ export async function requireAdmin() {
   const profile = await requireStaff();
   if (profile.role !== "admin") throw new Error("Apenas o gerente pode fazer isso.");
   return profile;
+}
+
+export type AuthError = { code?: string; message?: string; status?: number } | null | undefined;
+
+/**
+ * Message for a Neon Auth error. Codes come either normalized (user_already_exists)
+ * or raw from Better Auth (USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL), so match loosely.
+ */
+export function authErrorMessage(error: AuthError): string {
+  const code = (error?.code ?? "").toLowerCase();
+  const message = (error?.message ?? "").toLowerCase();
+  if (code.includes("already_exists") || code === "email_exists" || message.includes("already exists")) return "Já existe uma conta com este e-mail.";
+  if (code === "weak_password" || code.includes("password_too_short")) return "A senha precisa ter ao menos 8 caracteres.";
+  if (code.includes("invalid_password") || code === "invalid_credentials" || message.includes("invalid password")) return "Senha atual incorreta.";
+  if (code === "over_request_rate_limit" || error?.status === 429) return "Muitas tentativas. Aguarde alguns minutos.";
+  return error?.message || "Erro no serviço de login.";
+}
+
+/**
+ * Changes the sign-in e-mail. Neon Auth has no server call for it, so the
+ * managed `neon_auth.user` row is updated directly, together with `staff`.
+ * Sign-in looks the user up by e-mail and the password by user id, so the
+ * password keeps working.
+ */
+export async function setLoginEmail(userId: string, email: string) {
+  try {
+    await transaction(async (client) => {
+      const { rowCount } = await client.query(`update neon_auth."user" set email = $2, "updatedAt" = now() where id = $1`, [userId, email]);
+      if (!rowCount) throw new Error("Conta não encontrada.");
+      await client.query("update staff set email = $2 where user_id = $1", [userId, email]);
+    });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "23505") throw new Error("Já existe uma conta com este e-mail.");
+    throw e;
+  }
 }

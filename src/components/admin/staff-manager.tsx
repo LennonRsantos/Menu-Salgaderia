@@ -181,6 +181,9 @@ function StaffForm({ profile, isSelf, onDone }: { profile: Profile | null; isSel
         setErrors(fieldErrors(parsed.error));
         return;
       }
+    } else if (!staffSchema.shape.email.safeParse(form.email).success) {
+      setErrors({ email: "E-mail inválido." });
+      return;
     } else if (form.password && form.password.length < 8) {
       setErrors({ password: "A senha precisa ter ao menos 8 caracteres." });
       return;
@@ -189,7 +192,7 @@ function StaffForm({ profile, isSelf, onDone }: { profile: Profile | null; isSel
     startTransition(async () => {
       const res = await (
         profile
-          ? updateStaff({ id: profile.id, full_name: form.full_name, role: form.role, active: form.active, password: form.password || undefined })
+          ? updateStaff({ id: profile.id, full_name: form.full_name, email: form.email, role: form.role, active: form.active, password: form.password || undefined })
           : createStaff({ full_name: form.full_name, email: form.email, password: form.password, role: form.role })
       ).catch(() => ({ ok: false as const, error: "Sem conexão. Tente novamente." }));
       if (!res.ok) {
@@ -206,11 +209,9 @@ function StaffForm({ profile, isSelf, onDone }: { profile: Profile | null; isSel
       <Field label="Nome" error={errors.full_name}>
         {(p) => <Input {...p} value={form.full_name} onChange={(e) => set("full_name", e.target.value)} />}
       </Field>
-      {!profile && (
-        <Field label="E-mail" error={errors.email}>
-          {(p) => <Input {...p} type="email" autoComplete="off" spellCheck={false} value={form.email} onChange={(e) => set("email", e.target.value)} />}
-        </Field>
-      )}
+      <Field label="E-mail" error={errors.email} hint={profile && form.email.trim().toLowerCase() !== profile.email ? "A pessoa passa a entrar com este e-mail." : undefined}>
+        {(p) => <Input {...p} type="email" autoComplete="off" spellCheck={false} value={form.email} onChange={(e) => set("email", e.target.value)} />}
+      </Field>
       <Field
         label={profile ? "Nova senha" : "Senha"}
         optional={Boolean(profile)}

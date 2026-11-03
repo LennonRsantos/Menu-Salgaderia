@@ -1,9 +1,11 @@
 "use server";
 
-import { findStaff, requireStaff } from "@/lib/auth";
+import { z } from "zod";
+import { authErrorMessage, findStaff, requireStaff, setLoginEmail } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { neonAuth } from "@/lib/neon-auth";
 import { pinsError } from "@/lib/nav";
+import { tooManyRequests } from "@/lib/rate-limit";
 import type { Profile } from "@/types";
 
 export type SignInResult = { ok: true } | { ok: false; error: string };
@@ -71,5 +73,47 @@ export async function saveNavPins(keys: string[] | null): Promise<SignInResult> 
     return { ok: true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Não foi possível salvar os atalhos." };
+  }
+}
+
+const MIN_PASSWORD = 8;
+
+/** The signed-in person changes their own password; other devices are signed out. */
+export async function changeMyPassword(input: { current: string; next: string }): Promise<SignInResult> {
+  try {
+    await requireStaff();
+    const current = String(input?.current ?? "");
+    const next = String(input?.next ?? "");
+    if (!current) return { ok: false, error: "Informe a senha atual." };
+    if (next.length < MIN_PASSWORD) return { ok: false, error: `A nova senha precisa ter ao menos ${MIN_PASSWORD} caracteres.` };
+    if (next === current) return { ok: false, error: "A nova senha deve ser diferente da atual." };
+    const { error } = await neonAuth().changePassword({ currentPassword: current, newPassword: next, revokeOtherSessions: true });
+    if (error) return { ok: false, error: authErrorMessage(error) };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Não foi possível trocar a senha." };
+  }
+}
+
+const emailSchema = z.email("E-mail inválido.").trim().toLowerCase();
+
+/** The signed-in person changes their own sign-in e-mail, after confirming the password. */
+export async function changeMyEmail(input: { email: string; password: string }): Promise<{ ok: true; profile: Profile } | { ok: false; error: string }> {
+  try {
+    const me = await requireStaff();
+    const parsed = emailSchema.safeParse(String(input?.email ?? ""));
+    if (!parsed.success) return { ok: false, error: "E-mail inválido." };
+    const email = parsed.data;
+    const password = String(input?.password ?? "");
+    if (email === me.email) return { ok: false, error: "Este já é o seu e-mail." };
+    if (!password) return { ok: false, error: "Informe a senha atual." };
+    if (await tooManyRequests("email-change", 5, 15)) return { ok: false, error: "Muitas tentativas. Aguarde alguns minutos." };
+    // Neon Auth has no password check on its own; changing it to itself confirms it without changing anything
+    const { error } = await neonAuth().changePassword({ currentPassword: password, newPassword: password, revokeOtherSessions: false });
+    if (error) return { ok: false, error: authErrorMessage(error) };
+    await setLoginEmail(me.id, email);
+    return { ok: true, profile: { ...me, email } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Não foi possível trocar o e-mail." };
   }
 }

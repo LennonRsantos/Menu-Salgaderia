@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { profileFromRow, requireAdmin } from "@/lib/auth";
+import { authErrorMessage, profileFromRow, requireAdmin, setLoginEmail, type AuthError } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { neonAuth } from "@/lib/neon-auth";
 import { staffSchema } from "@/lib/validators";
@@ -13,7 +13,6 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 // the admin API used here. `staff` holds the panel role and the active flag.
 const authRole = (role: UserRole) => (role === "admin" ? "admin" : "user");
 
-type AuthError = { code?: string; message?: string; status?: number } | null | undefined;
 type AuthResult<T = unknown> = Promise<{ data: T | null; error: AuthError }>;
 
 // @neon/auth 0.8 types `admin` as unknown on the server instance; these are the
@@ -30,18 +29,10 @@ interface AdminApi {
 const adminApi = () => (neonAuth() as unknown as { admin: AdminApi }).admin;
 
 function authFail(error: AuthError): never {
-  // codes come either normalized (user_already_exists) or raw from Better Auth
-  // (USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL), so match loosely
-  const code = (error?.code ?? "").toLowerCase();
-  const message = (error?.message ?? "").toLowerCase();
-  if (code.includes("already_exists") || code === "email_exists" || message.includes("already exists")) {
-    throw new Error("Já existe uma conta com este e-mail.");
-  }
-  if (code === "weak_password" || code.includes("password_too_short")) throw new Error("A senha precisa ter ao menos 8 caracteres.");
   if (error?.status === 401 || error?.status === 403) {
     throw new Error("Sua conta não tem permissão de gerente no login. Rode npm run create-admin com seu e-mail.");
   }
-  throw new Error(error?.message || "Erro no serviço de login.");
+  throw new Error(authErrorMessage(error));
 }
 
 const fail = (error: unknown): ActionResult => {
@@ -90,6 +81,7 @@ export async function createStaff(input: { full_name: string; email: string; pas
 const updateSchema = z.object({
   id: z.string().min(1),
   full_name: z.string().trim().min(2, "Informe o nome."),
+  email: z.email("E-mail inválido.").trim().toLowerCase(),
   role: z.enum(["admin", "staff"]),
   active: z.boolean(),
   password: z.string().optional(),
@@ -101,7 +93,7 @@ export async function updateStaff(input: z.input<typeof updateSchema>): Promise<
     const data = updateSchema.parse(input);
     if (data.password && data.password.length < 8) return { ok: false, error: "A senha precisa ter ao menos 8 caracteres." };
 
-    const [current] = await query<{ role: UserRole; active: boolean }>("select role, active from staff where user_id = $1", [data.id]);
+    const [current] = await query<{ role: UserRole; active: boolean; email: string }>("select role, active, email from staff where user_id = $1", [data.id]);
     if (!current) return { ok: false, error: "Conta não encontrada." };
 
     const losesAdmin = current.role === "admin" && current.active && (data.role !== "admin" || !data.active);
@@ -122,6 +114,7 @@ export async function updateStaff(input: z.input<typeof updateSchema>): Promise<
       check(data.active ? await admin.unbanUser({ userId: data.id }) : await admin.banUser({ userId: data.id, banReason: "Desativado no painel" }));
     }
 
+    if (data.email !== current.email) await setLoginEmail(data.id, data.email);
     await query("update staff set full_name = $2, role = $3, active = $4 where user_id = $1", [data.id, data.full_name, data.role, data.active]);
     return { ok: true };
   } catch (e) {
