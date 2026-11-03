@@ -2,7 +2,9 @@
 
 import { updateTag } from "next/cache";
 import { requireStaff } from "@/lib/auth";
-import { iso, transaction } from "@/lib/db";
+import { iso, query, transaction } from "@/lib/db";
+import { COUPON_CODE, couponDiscount, couponProblem, normalizeCode, type CouponKind, type CouponRule } from "@/lib/coupons";
+import { spNow } from "@/lib/hours";
 import { MENU_TAG, PRODUCT_COLUMNS, productFromRow, SETTINGS_COLUMNS, settingsFromRow, ZONES_SQL } from "@/lib/menu";
 import { buildOrder, OrderError, type PlaceOrderInput } from "@/lib/order-logic";
 import { canTransition } from "@/lib/order-status";
@@ -13,7 +15,17 @@ import { tooManyRequests } from "@/lib/rate-limit";
 import { applyStockDeltas } from "@/lib/stock-db";
 import type { DeliveryZone, OrderItem, OrderStatus, Product, StockLink } from "@/types";
 
-export type PlaceOrderResult = { ok: true; code: number; public_token: string } | { ok: false; error: string };
+/** `coupon`: the error is about the coupon, shown next to its field. */
+export type PlaceOrderResult = { ok: true; code: number; public_token: string } | { ok: false; error: string; coupon?: boolean };
+
+class CouponError extends OrderError {}
+
+type CouponRow = CouponRule & { id: string };
+const COUPON_SQL = "select id, kind, value::float as value, max_uses, to_char(expires_on, 'YYYY-MM-DD') as expires_on, active from coupons where code = $1";
+// uses of the coupon in total, and by this customer (WhatsApp, or the signed-in account)
+const COUPON_USES_SQL = `select count(*)::int as uses,
+       count(*) filter (where customer_phone = $2 or ($3::text is not null and customer_user_id = $3))::int as mine
+  from coupon_redemptions where coupon_id = $1`;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,6 +56,20 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
       const products = new Map(rows.map(productFromRow).map((p) => [p.id, p]));
 
       const order = buildOrder(input, settings, products);
+
+      // the row lock queues two orders using the same coupon; the unique indexes are the last word
+      let discount = 0;
+      let coupon: CouponRow | null = null;
+      const couponCode = normalizeCode(input?.coupon_code);
+      if (couponCode) {
+        coupon = (await db.query<CouponRow>(`${COUPON_SQL} for update`, [couponCode])).rows[0] ?? null;
+        const usage = coupon ? (await db.query<{ uses: number; mine: number }>(COUPON_USES_SQL, [coupon.id, order.customer_phone, customerId])).rows[0] : null;
+        const problem = couponProblem(coupon, { today: spNow(new Date()).date, uses: usage?.uses ?? 0, usedByCustomer: (usage?.mine ?? 0) > 0 });
+        if (problem) throw new CouponError(problem);
+        discount = couponDiscount(coupon!, order.subtotal);
+        order.total = Math.round((order.subtotal - discount + order.delivery_fee) * 100) / 100;
+      }
+
       const costs = await orderItemCosts(clientRun(db), order.items);
       order.items.forEach((item, i) => {
         if (costs[i] !== undefined) item.unit_cost = costs[i];
@@ -71,8 +97,8 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
 
       const created = await db.query<{ id: string; code: number; public_token: string }>(
         `insert into orders (customer_phone, customer_name, address, fulfillment, payment_method, change_for,
-           items, subtotal, delivery_fee, total, notes, scheduled_for, customer_user_id)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           items, subtotal, delivery_fee, total, notes, scheduled_for, customer_user_id, discount, coupon_code)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          returning id, code, public_token`,
         [
           order.customer_phone,
@@ -88,9 +114,24 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
           order.notes,
           order.scheduled_for,
           customerId,
+          discount,
+          coupon ? couponCode : null,
         ],
       );
       const { id, code, public_token } = created.rows[0];
+
+      if (coupon) {
+        await db
+          .query("insert into coupon_redemptions (coupon_id, order_id, customer_phone, customer_user_id) values ($1, $2, $3, $4)", [
+            coupon.id,
+            id,
+            order.customer_phone,
+            customerId,
+          ])
+          .catch((e: { code?: string }) => {
+            throw e?.code === "23505" ? new CouponError("Você já usou este cupom.") : e;
+          });
+      }
 
       // signed-in customers keep the delivery address for next time (newest first, up to 5)
       if (customerId && order.address) {
@@ -124,9 +165,33 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
     if (result.stockChanged) updateTag(MENU_TAG);
     return { ok: true, code: result.code, public_token: result.public_token };
   } catch (e) {
+    if (e instanceof CouponError) return { ok: false, error: e.message, coupon: true };
     if (e instanceof OrderError) return { ok: false, error: e.message };
     console.error("placeOrder failed", e);
     return { ok: false, error: "Não foi possível enviar o pedido. Tente novamente." };
+  }
+}
+
+export type CouponCheck = { ok: true; code: string; kind: CouponKind; value: number } | { ok: false; error: string };
+
+/**
+ * Public: checkout preview of a coupon. Says only whether it applies and how
+ * much; placeOrder checks it again. Rate limited so codes can't be guessed in bulk.
+ */
+export async function checkCoupon(code: string, phone: string): Promise<CouponCheck> {
+  try {
+    if (await tooManyRequests("coupon", 20, 10)) return { ok: false, error: "Muitas tentativas. Aguarde alguns minutos." };
+    const c = normalizeCode(code);
+    if (!COUPON_CODE.test(c)) return { ok: false, error: "Cupom inválido." };
+    const [coupon] = await query<CouponRow>(COUPON_SQL, [c]);
+    const digits = String(phone ?? "").replace(/\D/g, "");
+    const [usage] = coupon ? await query<{ uses: number; mine: number }>(COUPON_USES_SQL, [coupon.id, digits, await currentCustomerId()]) : [];
+    const problem = couponProblem(coupon, { today: spNow(new Date()).date, uses: usage?.uses ?? 0, usedByCustomer: (usage?.mine ?? 0) > 0 });
+    if (problem) return { ok: false, error: problem };
+    return { ok: true, code: c, kind: coupon.kind, value: coupon.value };
+  } catch (e) {
+    console.error("checkCoupon failed", e);
+    return { ok: false, error: "Não foi possível conferir o cupom. Tente novamente." };
   }
 }
 

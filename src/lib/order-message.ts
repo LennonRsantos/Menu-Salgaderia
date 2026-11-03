@@ -25,6 +25,7 @@ export function orderWhatsAppMessage(order: PublicOrder, storeName: string, trac
   if (order.fulfillment === "delivery") {
     lines.push(`Entrega: ${Number(order.delivery_fee) > 0 ? formatBRL(order.delivery_fee) : "grátis"}`);
   }
+  if (Number(order.discount) > 0) lines.push(`Desconto${order.coupon_code ? ` (${order.coupon_code})` : ""}: -${formatBRL(order.discount)}`);
   lines.push(`*Total: ${formatBRL(order.total)}*`, "");
 
   const a = order.address;

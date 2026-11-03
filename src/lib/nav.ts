@@ -3,11 +3,11 @@
 
 import type { UserRole } from "@/types";
 
-export const NAV_KEYS = ["dashboard", "pedidos", "encomendas", "cardapio", "estoque", "custos", "clientes", "equipe", "loja"] as const;
+export const NAV_KEYS = ["dashboard", "pedidos", "encomendas", "cardapio", "estoque", "custos", "clientes", "cupons", "equipe", "loja"] as const;
 export type NavKey = (typeof NAV_KEYS)[number];
 
 /** Pages only the manager opens. */
-export const ADMIN_ONLY: ReadonlySet<NavKey> = new Set(["dashboard", "custos", "clientes", "equipe", "loja"]);
+export const ADMIN_ONLY: ReadonlySet<NavKey> = new Set(["dashboard", "custos", "clientes", "cupons", "equipe", "loja"]);
 
 export const DEFAULT_PINS: NavKey[] = ["pedidos", "encomendas", "cardapio", "estoque"];
 export const MAX_PINS = 4;

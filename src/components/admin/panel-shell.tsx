@@ -17,6 +17,7 @@ import {
   Settings,
   ShieldCheck,
   Sun,
+  TicketPercent,
   UtensilsCrossed,
   Users,
 } from "lucide-react";
@@ -65,6 +66,7 @@ const NAV: NavItem[] = [
   { key: "estoque", href: "/admin/estoque", label: "Estoque", icon: Boxes },
   { key: "custos", href: "/admin/custos", label: "Custos", icon: Calculator },
   { key: "clientes", href: "/admin/clientes", label: "Clientes", icon: Contact },
+  { key: "cupons", href: "/admin/cupons", label: "Cupons", icon: TicketPercent },
   { key: "equipe", href: "/admin/equipe", label: "Equipe", icon: Users },
   { key: "loja", href: "/admin/configuracoes", label: "Loja", icon: Settings },
 ];

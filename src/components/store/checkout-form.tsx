@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowLeft, Banknote, Bike, CalendarClock, CreditCard, Loader2, MapPin, QrCode, ShoppingBag, Store, Wallet, Zap } from "lucide-react";
+import { ArrowLeft, Banknote, Bike, CalendarClock, CreditCard, Loader2, MapPin, QrCode, ShoppingBag, Store, TicketPercent, Wallet, X, Zap } from "lucide-react";
 import Link from "next/link";
-import { placeOrder } from "@/actions/orders";
+import { checkCoupon, placeOrder } from "@/actions/orders";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -12,6 +12,7 @@ import { Card, ChoiceGroup, EmptyState, Skeleton } from "@/components/ui/misc";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cartTotals, loadCustomer, rememberOrder, saveCustomer, useCart } from "@/lib/cart-store";
 import { lookupCep } from "@/lib/cep";
+import { couponDiscount, couponLabel, normalizeCode, type CouponKind } from "@/lib/coupons";
 import { cn, formatBRL, mapsLink, maskPhone, maskZip, onlyDigits, parseMoney } from "@/lib/format";
 import { etaLabel, formatScheduled, scheduleDays, spInstant } from "@/lib/hours";
 import { useReservation } from "@/lib/reservation-store";
@@ -116,6 +117,11 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  // coupon typed at checkout: previewed here, checked again when the order is placed
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; kind: CouponKind; value: number } | null>(null);
+  const [couponError, setCouponError] = useState("");
+  const [checkingCoupon, setCheckingCoupon] = useState(false);
   const [zipLoading, setZipLoading] = useState(false);
   const [fullSlots, setFullSlots] = useState<string[]>([]);
   // signed-in customers: name, WhatsApp and saved addresses come from the account
@@ -162,7 +168,20 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
   const pickupEta = etaLabel(settings?.pickup_min, settings?.pickup_max);
   const noDelivery = fulfillment === "delivery" && zoneFee === null && form.neighborhood.trim() !== "";
   const fee = fulfillment === "delivery" ? (zoneFee ?? 0) : 0;
-  const total = subtotal + fee;
+  const discount = coupon ? couponDiscount(coupon, subtotal) : 0;
+  const total = subtotal - discount + fee;
+
+  async function applyCoupon() {
+    const code = normalizeCode(couponInput);
+    if (!code) return setCouponError("Digite o código do cupom.");
+    setCheckingCoupon(true);
+    setCouponError("");
+    const result = await checkCoupon(code, form.phone).catch(() => ({ ok: false as const, error: "Sem conexão. Tente novamente." }));
+    setCheckingCoupon(false);
+    if (!result.ok) return setCouponError(result.error);
+    setCoupon({ code: result.code, kind: result.kind, value: result.value });
+    setCouponInput("");
+  }
   const minOrder = settings?.min_order ?? 0;
 
   // out-of-stock items, or a closed store, leave scheduling as the only way to order
@@ -265,6 +284,7 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
       change_for: v.change_for,
       notes: v.notes,
       scheduled_for: when === "scheduled" ? spInstant(form.date, form.time).toISOString() : null,
+      coupon_code: coupon?.code ?? null,
       items: items.map((i) => ({
         product_id: i.productId,
         quantity: i.quantity,
@@ -276,6 +296,11 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
     if (!result.ok) {
       setSubmitting(false);
       toast.error(result.error);
+      if ("coupon" in result && result.coupon) {
+        // the coupon stopped applying (used up, already used by this number): the order goes without it
+        setCoupon(null);
+        setCouponError(result.error);
+      }
       if (result.error.includes("lotar")) {
         // someone took the last place: show the agenda as it is now
         setForm((f) => ({ ...f, time: "" }));
@@ -654,6 +679,54 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
               <CartLine key={i.key} item={i} editable={false} />
             ))}
           </ul>
+          <div className="border-t border-border py-4">
+            {coupon ? (
+              <div className="flex items-center gap-2 rounded-md bg-success-soft px-3 py-2 text-sm text-success-soft-foreground">
+                <TicketPercent className="size-4 shrink-0" />
+                <span className="flex-1">
+                  <strong translate="no">{coupon.code}</strong> · {couponLabel(coupon)} de desconto
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCoupon(null)}
+                  className="grid size-7 place-items-center rounded-full hover:bg-success/15"
+                  aria-label={`Remover o cupom ${coupon.code}`}
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <Field label="Cupom de desconto" optional error={couponError || undefined}>
+                {(p) => (
+                  <div className="flex gap-2">
+                    <Input
+                      {...p}
+                      value={couponInput}
+                      onChange={(e) => {
+                        setCouponInput(e.target.value.toUpperCase());
+                        if (couponError) setCouponError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          applyCoupon();
+                        }
+                      }}
+                      autoCapitalize="characters"
+                      autoComplete="off"
+                      spellCheck={false}
+                      maxLength={24}
+                      placeholder="EX.: BEMVINDO10"
+                      className="h-10 uppercase"
+                    />
+                    <Button type="button" variant="outline" onClick={applyCoupon} loading={checkingCoupon} className="h-10 shrink-0">
+                      Aplicar
+                    </Button>
+                  </div>
+                )}
+              </Field>
+            )}
+          </div>
           <dl className="space-y-2 border-t border-border pt-4 text-sm">
             <div className="flex justify-between">
               <dt className="text-muted-foreground">Subtotal</dt>
@@ -663,6 +736,12 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
               <dt className="text-muted-foreground">Taxa de entrega</dt>
               <dd className="tabular-nums">{fee > 0 ? formatBRL(fee) : "Grátis"}</dd>
             </div>
+            {discount > 0 && (
+              <div className="flex justify-between text-success-soft-foreground">
+                <dt>Desconto</dt>
+                <dd className="tabular-nums">−{formatBRL(discount)}</dd>
+              </div>
+            )}
             <div className="flex items-baseline justify-between pt-2 text-base">
               <dt className="font-semibold">Total</dt>
               <dd className="text-xl font-bold tabular-nums">{formatBRL(total)}</dd>

@@ -172,6 +172,7 @@ export function OrderDetailSheet({
           <section className="space-y-1.5 rounded-md border border-border p-3 text-sm">
             <Line label="Subtotal" value={formatBRL(order.subtotal)} />
             <Line label="Taxa de entrega" value={formatBRL(order.delivery_fee)} />
+            {order.discount > 0 && <Line label={`Cupom ${order.coupon_code ?? ""}`.trim()} value={`−${formatBRL(order.discount)}`} />}
             <div className="flex justify-between border-t border-border pt-2 text-base font-bold">
               <span>Total</span>
               <span className="tabular-nums">{formatBRL(order.total)}</span>

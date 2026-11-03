@@ -15,6 +15,8 @@ export interface PlaceOrderInput {
   items: { product_id: string; quantity: number; notes?: string; addon_ids: string[] }[];
   /** ISO instant of a scheduled order (encomenda); null or absent = as soon as possible. */
   scheduled_for?: string | null;
+  /** Discount coupon typed at checkout; checked and applied by placeOrder. */
+  coupon_code?: string | null;
 }
 
 export interface BuiltOrder {

@@ -159,6 +159,9 @@ export interface Order {
   status: OrderStatus;
   subtotal: number;
   delivery_fee: number;
+  /** Coupon discount on the products; `total` is already net of it. */
+  discount: number;
+  coupon_code: string | null;
   total: number;
   notes: string | null;
   /** Scheduled order (encomenda); null = as soon as possible. */

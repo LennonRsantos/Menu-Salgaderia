@@ -329,3 +329,35 @@ create index if not exists rate_hits_key_idx on rate_hits (key, at);
 -- Pages each person pins to the phone bar and tablet rail (src/lib/nav.ts);
 -- null = the default ones.
 alter table staff add column if not exists nav_pins text[];
+
+-- Discount coupons (admin "Cupons" tab, src/lib/coupons.ts). A coupon is used
+-- at most once per customer (WhatsApp, and account when signed in) and at most
+-- max_uses times in total (null = no limit). Cancelling an order keeps the use.
+create table if not exists coupons (
+  id         uuid primary key default gen_random_uuid(),
+  code       text not null,
+  kind       text not null check (kind in ('percent', 'amount')),
+  value      numeric(10, 2) not null check (value > 0),
+  max_uses   int check (max_uses >= 1),
+  expires_on date not null,
+  active     boolean not null default true,
+  created_at timestamptz not null default now(),
+  check (kind <> 'percent' or value <= 100)
+);
+create unique index if not exists coupons_code_idx on coupons (code);
+
+create table if not exists coupon_redemptions (
+  id               bigint generated always as identity primary key,
+  coupon_id        uuid not null references coupons (id) on delete restrict,
+  order_id         uuid not null references orders (id) on delete cascade,
+  customer_phone   text not null,
+  customer_user_id text,
+  created_at       timestamptz not null default now(),
+  unique (coupon_id, customer_phone)
+);
+create unique index if not exists coupon_redemptions_user_idx
+  on coupon_redemptions (coupon_id, customer_user_id) where customer_user_id is not null;
+
+-- Discount on the products (never on the delivery fee); total is already net of it.
+alter table orders add column if not exists discount numeric(10, 2) not null default 0 check (discount >= 0);
+alter table orders add column if not exists coupon_code text;

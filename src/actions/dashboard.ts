@@ -146,7 +146,8 @@ export async function getDashboard(days: number): Promise<DashboardResult> {
       // (fichas técnicas), or, for older orders, what the sale took from stock
       query<Omit<Profit, "margins">>(
         `with sold as (
-           select o.subtotal,
+           -- coupon discounts come off the products' revenue
+           select o.subtotal - o.discount as subtotal,
                   case when exists (select 1 from jsonb_array_elements(o.items) i where i ? 'unit_cost')
                        then (select coalesce(sum((i->>'unit_cost')::numeric * (i->>'quantity')::int), 0) from jsonb_array_elements(o.items) i)
                        else (select coalesce(sum(-m.delta * coalesce(m.unit_cost, 0)), 0) from stock_movements m

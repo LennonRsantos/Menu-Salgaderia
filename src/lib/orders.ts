@@ -3,7 +3,7 @@ import type { Order, OrderItem, PublicOrder } from "@/types";
 import { iso } from "./db";
 
 export const ORDER_COLUMNS = `id, code, public_token, customer_name, customer_phone, address, fulfillment, payment_method,
-  change_for, status, items, subtotal, delivery_fee, total, notes, scheduled_for, created_at, updated_at,
+  change_for, status, items, subtotal, delivery_fee, discount, coupon_code, total, notes, scheduled_for, created_at, updated_at,
   accepted_at, dispatched_at, completed_at, cancelled_at`;
 
 type Row = Record<string, unknown>;
@@ -21,6 +21,8 @@ export function orderFromRow(r: Row): Order {
     change_for: r.change_for === null ? null : Number(r.change_for),
     status: r.status as Order["status"],
     subtotal: Number(r.subtotal),
+    discount: Number(r.discount ?? 0),
+    coupon_code: (r.coupon_code as string | null) ?? null,
     delivery_fee: Number(r.delivery_fee),
     total: Number(r.total),
     notes: (r.notes as string | null) ?? null,
@@ -62,6 +64,8 @@ export function toPublicOrder(o: Order): PublicOrder {
       return copy;
     }),
     subtotal: o.subtotal,
+    discount: o.discount,
+    coupon_code: o.coupon_code,
     delivery_fee: o.delivery_fee,
     total: o.total,
     created_at: o.created_at,

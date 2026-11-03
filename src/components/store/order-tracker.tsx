@@ -167,6 +167,7 @@ export function OrderTracker({ token, settings }: { token: string; settings: Sto
         <dl className="space-y-1.5 border-t border-border pt-4 text-sm">
           <Row label="Subtotal" value={formatBRL(order.subtotal)} />
           <Row label="Taxa de entrega" value={Number(order.delivery_fee) > 0 ? formatBRL(order.delivery_fee) : "Grátis"} />
+          {order.discount > 0 && <Row label={`Desconto${order.coupon_code ? ` (${order.coupon_code})` : ""}`} value={`−${formatBRL(order.discount)}`} />}
           <div className="flex items-baseline justify-between pt-1 text-base">
             <dt className="font-semibold">Total</dt>
             <dd className="text-lg font-bold tabular-nums">{formatBRL(order.total)}</dd>
