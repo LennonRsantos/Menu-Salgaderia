@@ -78,6 +78,53 @@ O site já vem com:
 - páginas de erro e de "não encontrado" em português;
 - `noindex` no painel.
 
+## App Android do painel
+
+O painel (`/admin`) também funciona como app Android. O projeto em `android/` é uma Trusted Web Activity (TWA): uma "casca" oficial do Google que abre `https://menu-salgaderia.vercel.app/admin` em tela cheia, usando o Chrome do aparelho. Não existe uma segunda base de código.
+
+- **Atualizações:** cada deploy na Vercel já atualiza o app. Ao ser aberto, ele carrega a versão mais nova. Um painel que ficou aberto mostra o aviso "Nova versão do painel disponível", com o botão **Atualizar** (`src/components/admin/app-updates.tsx`).
+- **Instalar:** mande o arquivo `android/Menu-Painel.apk` pelo WhatsApp ou pelo Drive e abra no celular. Quando o Android pedir, permita "instalar apps desconhecidos". O login é o mesmo do site.
+- **Sem o APK:** no Chrome do Android, abra o painel e toque em "Instalar app". O painel tem um manifest próprio, `/admin.webmanifest`.
+
+Peças no site:
+- **Manifest e ícones:** `src/app/admin.webmanifest/route.ts` e `public/admin-icons/`. São só do painel; a loja não vira app.
+- **Service worker:** `public/admin-sw.js`. Só mostra a tela "Sem conexão" e não guarda cache, então nunca serve uma versão velha.
+- **Vínculo com o site:** `src/app/.well-known/assetlinks.json/route.ts` e `src/lib/android-app.ts` provam que o app pertence ao site. Sem isso, o app abre com a barra de endereço.
+- **Versão do deploy:** `src/app/api/version/route.ts` e `src/lib/app-version.ts`, usadas no aviso de atualização.
+
+### Quando gerar o APK de novo
+
+Só quando mudar o nome, o ícone, as cores das barras ou o domínio. Nesses casos:
+1. Ajuste `android/twa-manifest.json` e `android/app/build.gradle`. Aumente `appVersionCode` (por exemplo, 2) e `appVersion` (por exemplo, 1.0.1).
+2. Na pasta do projeto, rode o script abaixo. Ele precisa do JDK 17 e do Android SDK (serve o do Android Studio). A senha da chave está em `android/keystore/LEIA-ME.txt`.
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File android\build.ps1
+   ```
+3. Instale o novo APK por cima do antigo. Isso só funciona se ele for assinado com a mesma chave.
+
+Se o domínio mudar (por exemplo, para um domínio próprio), troque `host` em `android/twa-manifest.json` e `hostName` em `android/app/build.gradle`. Depois, gere o APK de novo.
+
+### A chave de assinatura
+
+`android/keystore/menu-painel.keystore` assina o app e **fica fora do git**, na pasta do OneDrive. Guarde uma cópia da chave e da senha em lugar seguro.
+
+Se a chave se perder:
+1. Gere uma chave nova.
+2. Troque a impressão SHA-256 em `src/lib/android-app.ts` e publique o site.
+3. Desinstale o app antigo de cada aparelho e instale o novo.
+
+Para ver a impressão SHA-256 da chave:
+```bash
+keytool -list -v -keystore android/keystore/menu-painel.keystore -alias painel
+```
+
+### Google Play (opcional)
+
+O arquivo `android/app-release-bundle.aab` é o que vai para a Play Store.
+1. Crie uma conta no Play Console (US$ 25, pagamento único) e um app com o pacote `com.menusalgaderia.painel`.
+2. Publique em **Teste interno**, só para a equipe.
+3. Em **Integridade do app**, copie a impressão SHA-256 da chave de assinatura do Google. Acrescente essa impressão em `ANDROID_APP.fingerprints`, em `src/lib/android-app.ts`. Sem isso, o app baixado da Play abre com a barra de endereço.
+
 ## Perfis de acesso (RBAC)
 
 | Ação | Gerente | Funcionário |

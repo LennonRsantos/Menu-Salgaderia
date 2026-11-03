@@ -44,6 +44,16 @@ next-env.d.ts
 # neon
 .neon
 
+# android app of the panel: build output and the signing key stay out of git
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/keystore/
+*.apk
+*.aab
+*.idsig
+
 # agent tooling (not part of the app)
 .claude/
 skills-lock.json
