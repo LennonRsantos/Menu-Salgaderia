@@ -1,0 +1,196 @@
+-- Salgaderia schema (Lakebase Postgres on Neon). Idempotent: `npm run db:migrate`
+-- can run any number of times. Users and sessions live in the `neon_auth`
+-- schema managed by Neon Auth; `staff` says who may use the panel.
+
+create table if not exists store_settings (
+  id            int primary key default 1 check (id = 1),
+  name          text not null default 'Menu Salgaderia e Confeitaria',
+  tagline       text,
+  phone         text,
+  logo_url      text,
+  delivery_fee  numeric(10, 2) not null default 0 check (delivery_fee >= 0),
+  min_order     numeric(10, 2) not null default 0 check (min_order >= 0),
+  is_open       boolean not null default true,
+  opening_hours text,
+  updated_at    timestamptz not null default now()
+);
+
+-- Panel access. user_id is neon_auth."user".id; an account without a row here
+-- (or with active = false) can sign in to Neon Auth but reaches nothing.
+create table if not exists staff (
+  user_id    text primary key,
+  full_name  text not null,
+  email      text not null,
+  role       text not null check (role in ('admin', 'staff')),
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists categories (
+  id        uuid primary key default gen_random_uuid(),
+  name      text not null,
+  position  int not null default 0,
+  is_active boolean not null default true
+);
+
+-- Addon groups are stored inside the product row (jsonb) so a product edit is
+-- one atomic write: [{ id, name, min_select, max_select, position,
+--                     addons: [{ id, name, price, is_available, position }] }]
+create table if not exists products (
+  id           uuid primary key default gen_random_uuid(),
+  category_id  uuid not null references categories (id) on delete restrict,
+  name         text not null,
+  description  text,
+  price        numeric(10, 2) not null check (price >= 0),
+  image_url    text,
+  is_visible   boolean not null default true,
+  is_available boolean not null default true,
+  position     int not null default 0,
+  addon_groups jsonb not null default '[]'::jsonb,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists products_category_idx on products (category_id);
+
+create table if not exists customers (
+  phone        text primary key,
+  name         text not null,
+  last_address jsonb,
+  orders_count int not null default 0,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+create table if not exists customer_addresses (
+  id             bigint generated always as identity primary key,
+  customer_phone text not null references customers (phone) on delete cascade,
+  address        jsonb not null,
+  created_at     timestamptz not null default now()
+);
+
+create sequence if not exists order_code_seq start 1001;
+
+-- Orders keep a snapshot of names, prices and addons (items jsonb), so menu
+-- edits never change past orders.
+create table if not exists orders (
+  id             uuid primary key default gen_random_uuid(),
+  code           int not null unique default nextval('order_code_seq'),
+  public_token   uuid not null unique default gen_random_uuid(),
+  customer_phone text not null references customers (phone),
+  customer_name  text not null,
+  address        jsonb,
+  fulfillment    text not null check (fulfillment in ('delivery', 'pickup')),
+  payment_method text not null check (payment_method in ('pix', 'credit', 'debit', 'cash')),
+  change_for     numeric(10, 2),
+  status         text not null default 'new'
+                 check (status in ('new', 'preparing', 'out_for_delivery', 'completed', 'cancelled')),
+  items          jsonb not null,
+  subtotal       numeric(10, 2) not null,
+  delivery_fee   numeric(10, 2) not null,
+  total          numeric(10, 2) not null,
+  notes          text,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now(),
+  accepted_at    timestamptz,
+  dispatched_at  timestamptz,
+  completed_at   timestamptz,
+  cancelled_at   timestamptz
+);
+create index if not exists orders_status_idx on orders (status);
+create index if not exists orders_created_idx on orders (created_at);
+
+-- Photos uploaded from the panel (products and store logo). The browser shrinks
+-- them before upload, so rows stay small; GET /api/images/<id> serves them with
+-- an immutable cache header, since a new photo always gets a new id.
+create table if not exists images (
+  id           uuid primary key default gen_random_uuid(),
+  content_type text not null check (content_type in ('image/webp', 'image/jpeg', 'image/png')),
+  data         bytea not null check (octet_length(data) <= 800000),
+  created_at   timestamptz not null default now()
+);
+
+-- Stock. Items have their own categories (they may never appear on the menu,
+-- e.g. boxes). stock_links say what one unit of a product, or of one of its
+-- addons, consumes; a product without links sells without limit.
+create table if not exists stock_categories (
+  id       uuid primary key default gen_random_uuid(),
+  name     text not null,
+  position int not null default 0
+);
+
+create table if not exists stock_items (
+  id           uuid primary key default gen_random_uuid(),
+  category_id  uuid not null references stock_categories (id) on delete restrict,
+  name         text not null,
+  unit         text not null default 'un',
+  quantity     numeric(10, 2) not null default 0,
+  min_quantity numeric(10, 2) not null default 0 check (min_quantity >= 0),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+create index if not exists stock_items_category_idx on stock_items (category_id);
+
+-- addon_id null: the product itself; otherwise the addon id inside products.addon_groups.
+create table if not exists stock_links (
+  id         bigint generated always as identity primary key,
+  product_id uuid not null references products (id) on delete cascade,
+  addon_id   text,
+  item_id    uuid not null references stock_items (id) on delete restrict,
+  quantity   numeric(10, 2) not null check (quantity > 0)
+);
+create index if not exists stock_links_product_idx on stock_links (product_id);
+create index if not exists stock_links_item_idx on stock_links (item_id);
+
+-- Every change of stock_items.quantity, so cancelling an order returns exactly
+-- what its sale took, even if the links changed since.
+create table if not exists stock_movements (
+  id         bigint generated always as identity primary key,
+  item_id    uuid not null references stock_items (id) on delete cascade,
+  delta      numeric(10, 2) not null,
+  reason     text not null check (reason in ('sale', 'cancel', 'restock', 'adjust')),
+  order_id   uuid references orders (id) on delete set null,
+  user_name  text,
+  note       text,
+  created_at timestamptz not null default now()
+);
+create index if not exists stock_movements_item_idx on stock_movements (item_id, created_at desc);
+create index if not exists stock_movements_order_idx on stock_movements (order_id);
+
+-- Opening hours: [{ day: 0..6 (0 = Sunday), open: "HH:MM", close: "HH:MM" }].
+-- With auto_hours the store follows them; is_open stays as the manual pause.
+alter table store_settings add column if not exists hours jsonb not null default '[]'::jsonb;
+alter table store_settings add column if not exists auto_hours boolean not null default false;
+-- Neighborhoods outside delivery_zones: charged delivery_fee when true, refused when false.
+alter table store_settings add column if not exists other_zones boolean not null default true;
+-- Scheduled orders (encomendas).
+alter table store_settings add column if not exists schedule_enabled boolean not null default false;
+alter table store_settings add column if not exists schedule_min_hours int not null default 24 check (schedule_min_hours between 0 and 720);
+alter table store_settings add column if not exists schedule_max_days int not null default 30 check (schedule_max_days between 1 and 180);
+
+create table if not exists delivery_zones (
+  id       uuid primary key default gen_random_uuid(),
+  name     text not null,
+  fee      numeric(10, 2) not null check (fee >= 0),
+  position int not null default 0
+);
+
+-- null: as soon as possible. Scheduled orders take stock when accepted, not when placed.
+alter table orders add column if not exists scheduled_for timestamptz;
+create index if not exists orders_scheduled_idx on orders (scheduled_for) where scheduled_for is not null;
+
+-- Unit cost, for the dashboard's cost of goods and margins. Movements keep the
+-- cost of the moment, so later price changes don't rewrite past profit.
+alter table stock_items add column if not exists cost numeric(10, 2) not null default 0 check (cost >= 0);
+alter table stock_movements add column if not exists unit_cost numeric(10, 2);
+
+-- Store address, estimated times (minutes) and which fulfillment modes are on.
+alter table store_settings add column if not exists address text;
+alter table store_settings add column if not exists delivery_enabled boolean not null default true;
+alter table store_settings add column if not exists pickup_enabled boolean not null default true;
+alter table store_settings add column if not exists delivery_min int check (delivery_min between 0 and 600);
+alter table store_settings add column if not exists delivery_max int check (delivery_max between 0 and 600);
+alter table store_settings add column if not exists pickup_min int check (pickup_min between 0 and 600);
+alter table store_settings add column if not exists pickup_max int check (pickup_max between 0 and 600);
+
+-- Most orders one 30-minute scheduling slot takes; null = no limit.
+alter table store_settings add column if not exists slot_capacity int check (slot_capacity between 1 and 500);
