@@ -19,7 +19,8 @@ function withVerifiedSsl(url: string | undefined) {
 
 function pool() {
   if (!globalForPool.pgPool) {
-    globalForPool.pgPool = new pg.Pool({ connectionString: withVerifiedSsl(process.env.DATABASE_URL), max: 5 });
+    // the dashboard runs about a dozen queries at once; Neon's pooler endpoint takes many more
+    globalForPool.pgPool = new pg.Pool({ connectionString: withVerifiedSsl(process.env.DATABASE_URL), max: 10 });
     // lets Vercel Fluid compute close idle clients before suspending the function
     attachDatabasePool(globalForPool.pgPool);
   }
