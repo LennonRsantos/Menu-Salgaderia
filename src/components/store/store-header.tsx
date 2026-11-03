@@ -1,11 +1,13 @@
 "use client";
 
-import { Bike, CalendarClock, Clock, MapPin, Receipt, ShoppingBag, Store, UserRound } from "lucide-react";
+import { Bike, CalendarClock, Clock, LayoutDashboard, MapPin, Receipt, ShoppingBag, Store, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
+import { getMyProfile } from "@/actions/auth";
 import { getMyAccount } from "@/actions/customer";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { forgetOrder, loadRecentOrders, type RecentOrder } from "@/lib/cart-store";
+import { clearStaff, hasStaffHint } from "@/lib/staff-hint";
 import { useReservation } from "@/lib/reservation-store";
 import { useStoreStatus } from "@/lib/use-store-status";
 import { cn, formatBRL, mapsLink } from "@/lib/format";
@@ -83,6 +85,23 @@ export function StoreHeader({ settings, theme = DEFAULT_THEME }: { settings: Sto
       cancelled = true;
     };
   }, []);
+  // "Painel" shortcut for the team only: asked to the server, and only on
+  // devices where someone already opened the panel (customers never ask)
+  const [isStaff, setIsStaff] = useState(false);
+  useEffect(() => {
+    if (!hasStaffHint()) return;
+    let cancelled = false;
+    getMyProfile()
+      .then((r) => {
+        if (cancelled) return;
+        if (r.profile) setIsStaff(true);
+        else if (!r.error) clearStaff();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const isOpen = status.open;
   // with zones the fee depends on the neighborhood: show the lowest one
   const deliveryEta = etaLabel(settings?.delivery_min, settings?.delivery_max);
@@ -123,6 +142,15 @@ export function StoreHeader({ settings, theme = DEFAULT_THEME }: { settings: Sto
       <FestiveEffects theme={theme} />
       <div className="relative mx-auto flex max-w-5xl flex-col gap-4 px-4 pt-4 pb-5 sm:px-6">
         <div className="flex items-center justify-end gap-1">
+          {isStaff && (
+            <Link
+              href="/admin"
+              className="mr-auto inline-flex h-10 items-center gap-2 rounded-full bg-primary-soft px-3.5 text-sm font-semibold text-primary-soft-foreground hover:bg-primary-soft-hover"
+            >
+              <LayoutDashboard className="size-4" />
+              Painel
+            </Link>
+          )}
           {recent && (
             <Link
               href={`/pedido/${recent.token}`}

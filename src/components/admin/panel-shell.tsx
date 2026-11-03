@@ -8,13 +8,13 @@ import {
   ClipboardList,
   Contact,
   Ellipsis,
-  ExternalLink,
   LayoutDashboard,
   LogOut,
   Monitor,
   Moon,
   Pin,
   Settings,
+  Store,
   ShieldCheck,
   Sun,
   TicketPercent,
@@ -35,6 +35,7 @@ import { Switch } from "@/components/ui/switch";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/format";
 import { canSee, MAX_PINS, resolvePins, type NavKey } from "@/lib/nav";
+import { clearStaff, markStaff } from "@/lib/staff-hint";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { useMounted } from "@/lib/use-mounted";
 import type { Profile } from "@/types";
@@ -117,6 +118,8 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
       if (cancelled) return;
       if (result.profile) {
         hadProfile = true;
+        // lets the storefront offer the "Painel" button on this device
+        markStaff();
         setProfile(result.profile);
         setLoadError(null);
       } else if (result.error) {
@@ -124,6 +127,7 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
       } else {
         if (hadProfile) toast.error("Sua conta não tem mais acesso ao painel.");
         setProfile(null);
+        clearStaff();
         await signOutStaff();
         router.replace("/admin/login");
       }
@@ -139,6 +143,7 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
   }, [router]);
 
   async function signOut() {
+    clearStaff();
     await signOutStaff();
     router.replace("/admin/login");
   }
@@ -202,8 +207,9 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
             : Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-11" />)}
         </nav>
         <div className="border-t border-border p-3">
-          <Link href="/" target="_blank" className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground">
-            <ExternalLink className="size-4" />
+          {/* same tab: the storefront shows a "Painel" button back to the team */}
+          <Link href="/" className="flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-surface-2 hover:text-foreground">
+            <Store className="size-4" />
             Ver cardápio público
           </Link>
           {profile && <UserCard profile={profile} onSignOut={signOut} />}
@@ -443,8 +449,8 @@ function MoreSheet({
             <span className="flex-1 text-left">Escolher atalhos</span>
             <ChevronRight className="size-4 text-muted-foreground" />
           </button>
-          <Link href="/" target="_blank" onClick={onClose} className={row}>
-            <ExternalLink className="size-5 text-muted-foreground" />
+          <Link href="/" onClick={onClose} className={row}>
+            <Store className="size-5 text-muted-foreground" />
             <span className="flex-1">Ver cardápio público</span>
           </Link>
           <div className="flex items-center gap-3 px-3 py-1.5">
