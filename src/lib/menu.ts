@@ -2,8 +2,9 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import type { Category, DeliveryZone, MenuCategory, Product, StockLink, StoreSettings } from "@/types";
 import { isDatabaseConfigured, query } from "./db";
-import { cleanHours } from "./hours";
+import { cleanHours, spNow } from "./hours";
 import { applyStock } from "./stock";
+import { activeTheme, DEFAULT_THEME, toFestiveMode, toPalette, type ActiveTheme } from "./themes";
 
 export const MENU_TAG = "menu";
 export const SETTINGS_TAG = "settings";
@@ -50,17 +51,28 @@ export function productFromRow(r: Record<string, unknown>): Product {
 
 export const SETTINGS_COLUMNS =
   "id, name, tagline, phone, logo_url, delivery_fee, min_order, is_open, opening_hours, auto_hours, hours, other_zones, schedule_enabled, schedule_min_hours, schedule_max_days, " +
-  "address, delivery_enabled, pickup_enabled, delivery_min, delivery_max, pickup_min, pickup_max, slot_capacity";
+  "address, delivery_enabled, pickup_enabled, delivery_min, delivery_max, pickup_min, pickup_max, slot_capacity, " +
+  "theme_palette, festive_mode, festive_message, festive_effects";
 export const ZONES_SQL = "select id, name, fee, position from delivery_zones order by position, name";
+export const SPECIAL_DATES_SQL = "select to_char(date, 'YYYY-MM-DD') as date, title from special_dates order by date";
 
 /** Settings row + delivery zones, with hours cleaned up. */
-export function settingsFromRow(row: Record<string, unknown>, zones: DeliveryZone[]): StoreSettings {
+export function settingsFromRow(
+  row: Record<string, unknown>,
+  zones: DeliveryZone[],
+  specialDates: StoreSettings["special_dates"] = [],
+): StoreSettings {
   return {
     ...(row as unknown as StoreSettings),
     hours: cleanHours(row.hours),
     schedule_min_hours: Number(row.schedule_min_hours ?? 24),
     schedule_max_days: Number(row.schedule_max_days ?? 30),
     zones: zones.map((z) => ({ ...z, fee: Number(z.fee) })),
+    special_dates: specialDates,
+    theme_palette: toPalette(row.theme_palette),
+    festive_mode: toFestiveMode(row.festive_mode),
+    festive_message: (row.festive_message as string | null) ?? null,
+    festive_effects: row.festive_effects !== false,
   };
 }
 
@@ -106,12 +118,42 @@ export async function getStoreSettings(): Promise<StoreSettings | null> {
 
   if (!isDatabaseConfigured) return null;
   try {
-    const [[row], zones] = await Promise.all([
+    const [[row], zones, dates] = await Promise.all([
       query(`select ${SETTINGS_COLUMNS} from store_settings where id = 1`),
       query<DeliveryZone>(ZONES_SQL),
+      query<StoreSettings["special_dates"][number]>(SPECIAL_DATES_SQL),
     ]);
-    return row ? settingsFromRow(row, zones) : null;
+    return row ? settingsFromRow(row, zones, dates) : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Palette and festive theme for today, read by the root layout on every page.
+ * Cached by the hour, so the calendar ("auto") switches themes on its own.
+ */
+export async function getActiveTheme(): Promise<ActiveTheme> {
+  "use cache";
+  cacheTag(SETTINGS_TAG);
+  cacheLife("hours");
+
+  if (!isDatabaseConfigured) return DEFAULT_THEME;
+  try {
+    const [row] = await query(
+      "select theme_palette, festive_mode, festive_message, festive_effects from store_settings where id = 1",
+    );
+    if (!row) return DEFAULT_THEME;
+    return activeTheme(
+      {
+        theme_palette: toPalette(row.theme_palette),
+        festive_mode: toFestiveMode(row.festive_mode),
+        festive_message: (row.festive_message as string | null) ?? null,
+        festive_effects: row.festive_effects !== false,
+      },
+      spNow(new Date()).date,
+    );
+  } catch {
+    return DEFAULT_THEME;
   }
 }

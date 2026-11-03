@@ -7,6 +7,8 @@ import { MENU_TAG, PRODUCT_COLUMNS, productFromRow, SETTINGS_COLUMNS, settingsFr
 import { buildOrder, OrderError, type PlaceOrderInput } from "@/lib/order-logic";
 import { canTransition } from "@/lib/order-status";
 import { formatQty, stockNeeds } from "@/lib/stock";
+import { clientRun, orderItemCosts } from "@/lib/costs-db";
+import { currentCustomerId } from "@/lib/customer-session";
 import { applyStockDeltas } from "@/lib/stock-db";
 import type { DeliveryZone, OrderItem, OrderStatus, Product, StockLink } from "@/types";
 
@@ -21,6 +23,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
   try {
     const productIds = [...new Set((input?.items ?? []).map((i) => String(i?.product_id ?? "")).filter((id) => UUID.test(id)))].slice(0, 50);
+    // the session decides the account; the browser never sends a user id
+    const customerId = await currentCustomerId();
 
     const result = await transaction(async (db) => {
       const [settingsRow] = (await db.query(`select ${SETTINGS_COLUMNS} from store_settings where id = 1`)).rows;
@@ -35,6 +39,10 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
       const products = new Map(rows.map(productFromRow).map((p) => [p.id, p]));
 
       const order = buildOrder(input, settings, products);
+      const costs = await orderItemCosts(clientRun(db), order.items);
+      order.items.forEach((item, i) => {
+        if (costs[i] !== undefined) item.unit_cost = costs[i];
+      });
 
       // per-slot limit: the lock queues concurrent orders for the same slot
       if (order.scheduled_for && settings?.slot_capacity) {
@@ -58,8 +66,8 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
 
       const created = await db.query<{ id: string; code: number; public_token: string }>(
         `insert into orders (customer_phone, customer_name, address, fulfillment, payment_method, change_for,
-           items, subtotal, delivery_fee, total, notes, scheduled_for)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           items, subtotal, delivery_fee, total, notes, scheduled_for, customer_user_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          returning id, code, public_token`,
         [
           order.customer_phone,
@@ -74,9 +82,26 @@ export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResu
           order.total,
           order.notes,
           order.scheduled_for,
+          customerId,
         ],
       );
       const { id, code, public_token } = created.rows[0];
+
+      // signed-in customers keep the delivery address for next time (newest first, up to 5)
+      if (customerId && order.address) {
+        await db.query(
+          `update customer_accounts set addresses = (
+             select coalesce(jsonb_agg(a order by n), '[]'::jsonb) from (
+               select a, n from (select $2::jsonb as a, 0::bigint as n
+                              union all
+                              select a, n from jsonb_array_elements(addresses) with ordinality as e(a, n)
+                               where not (a->>'street' = $2::jsonb->>'street' and a->>'number' = $2::jsonb->>'number'
+                                          and coalesce(a->>'complement', '') = coalesce($2::jsonb->>'complement', ''))) x
+               order by n limit 5) y)
+           where user_id = $1`,
+          [customerId, JSON.stringify(order.address)],
+        );
+      }
       // a scheduled order is produced for its date: stock is taken when the store accepts it
       if (order.scheduled_for) return { code, public_token, stockChanged: false };
 

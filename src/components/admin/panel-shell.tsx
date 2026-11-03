@@ -2,9 +2,11 @@
 
 import {
   Boxes,
+  Calculator,
   CalendarClock,
   ChevronRight,
   ClipboardList,
+  Contact,
   Ellipsis,
   ExternalLink,
   LayoutDashboard,
@@ -57,6 +59,8 @@ const NAV: NavItem[] = [
   { href: "/admin/encomendas", label: "Encomendas", short: "Agenda", icon: CalendarClock, adminOnly: false, group: "main" },
   { href: "/admin/cardapio", label: "Cardápio", icon: UtensilsCrossed, adminOnly: false, group: "main" },
   { href: "/admin/estoque", label: "Estoque", icon: Boxes, adminOnly: false, group: "main" },
+  { href: "/admin/custos", label: "Custos", icon: Calculator, adminOnly: true, group: "more" },
+  { href: "/admin/clientes", label: "Clientes", icon: Contact, adminOnly: true, group: "more" },
   { href: "/admin/equipe", label: "Equipe", icon: Users, adminOnly: true, group: "more" },
   { href: "/admin/configuracoes", label: "Loja", icon: Settings, adminOnly: true, group: "more" },
 ];

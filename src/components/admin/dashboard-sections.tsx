@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Clock, MapPin, MessageCircle, Minus, Timer, Users } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getCashClosing, type CashClosing, type Customers, type HeatCell, type Neighborhood, type Profit, type Times } from "@/actions/dashboard";
@@ -187,30 +188,37 @@ export function ProfitCard({ profit, range }: { profit: Profit | null; range: nu
     );
   }
   const gross = profit.items_revenue - profit.cost;
+  const net = gross - profit.fixed_expenses;
   // margin only over sales that carry a cost; sales without one would inflate it
   const margin = profit.covered_revenue > 0 ? ((profit.covered_revenue - profit.cost) / profit.covered_revenue) * 100 : 0;
   const coverage = profit.items_revenue > 0 ? Math.round((profit.covered_revenue / profit.items_revenue) * 100) : 0;
   return (
     <Card className="p-5">
-      <SectionHeader title="Lucro bruto" description={`Vendas de produtos menos o custo, nos últimos ${range} dias.`} />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <SectionHeader title="Lucro" description={`Vendas de produtos menos o custo e as despesas, nos últimos ${range} dias.`}>
+        <Link href="/admin/custos" className={buttonClasses("outline", "sm")}>
+          Custos
+        </Link>
+      </SectionHeader>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Stat label="Vendas (produtos)" value={formatBRL(profit.items_revenue)} />
         <Stat label="Custo (CMV)" value={formatBRL(profit.cost)} />
         <Stat label="Lucro bruto" value={formatBRL(gross)} />
-        <Stat label="Margem" value={profit.cost > 0 ? `${Math.round(margin)}%` : "–"} hint={coverage < 100 && profit.cost > 0 ? "nas vendas com custo" : undefined} />
+        <Stat label="Margem bruta" value={profit.cost > 0 ? `${Math.round(margin)}%` : "–"} hint={coverage < 100 && profit.cost > 0 ? "nas vendas com custo" : undefined} />
+        <Stat label="Despesas fixas" value={formatBRL(profit.fixed_expenses)} hint={profit.fixed_expenses > 0 ? "parte do período" : "nenhuma lançada"} />
+        <Stat label="Lucro líquido" value={formatBRL(net)} className={net < 0 ? "text-danger" : undefined} />
       </div>
       {coverage < 100 && (
         <p className="mt-3 flex items-start gap-2 rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           {profit.cost > 0
-            ? `Só ${coverage}% das vendas têm custo cadastrado. Ligue os produtos ao estoque e informe o custo dos itens para um lucro exato.`
-            : "Nenhuma venda com custo ainda. Informe o custo dos itens no Estoque e ligue os produtos a eles."}
+            ? `Só ${coverage}% das vendas têm custo cadastrado. Monte a ficha técnica dos produtos em Custos para um lucro exato.`
+            : "Nenhuma venda com custo ainda. Monte a ficha técnica dos produtos em Custos."}
         </p>
       )}
       {profit.margins.length > 0 && (
         <div className="mt-4">
           <h3 className="mb-1 text-sm font-semibold">Margem por produto</h3>
-          <p className="mb-2 text-xs text-muted-foreground">Preço atual menos o custo dos itens do estoque. As menores margens primeiro.</p>
+          <p className="mb-2 text-xs text-muted-foreground">Preço atual menos o custo da ficha técnica (ou do estoque). As menores margens primeiro.</p>
           <table className="w-full text-sm">
             <thead>
               <tr className="text-xs text-muted-foreground">

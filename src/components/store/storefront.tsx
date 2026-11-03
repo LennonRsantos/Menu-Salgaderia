@@ -1,23 +1,33 @@
 "use client";
 
-import { Search, SearchX, Store, X } from "lucide-react";
+import { CalendarCheck, Search, SearchX, Store, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState } from "@/components/ui/misc";
 import type { MenuResult } from "@/lib/menu";
 import { cn, normalizeSearch } from "@/lib/format";
+import { formatScheduled, spInstant } from "@/lib/hours";
+import { useReservation } from "@/lib/reservation-store";
+import { useMounted } from "@/lib/use-mounted";
 import { useStoreStatus } from "@/lib/use-store-status";
+import type { ActiveTheme } from "@/lib/themes";
 import type { Product, StoreSettings } from "@/types";
 import { CartBar } from "./cart";
+import { ReservationSheet } from "./reservation-sheet";
 import { ProductCard } from "./product-card";
 import { ProductSheet } from "./product-sheet";
 import { StoreHeader } from "./store-header";
 
-export function Storefront({ menu, settings }: { menu: MenuResult; settings: StoreSettings | null }) {
+export function Storefront({ menu, settings, theme }: { menu: MenuResult; settings: StoreSettings | null; theme?: ActiveTheme }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Product | null>(null);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
   const status = useStoreStatus(settings);
+  const mounted = useMounted();
+  const storedReservation = useReservation((s) => s.value);
+  const reservation = mounted ? storedReservation : null;
+  const setReservationOpen = useReservation((s) => s.setOpen);
+  const clearReservation = useReservation((s) => s.clear);
 
   const categories = useMemo(() => (menu.ok ? menu.categories : []), [menu]);
 
@@ -61,7 +71,24 @@ export function Storefront({ menu, settings }: { menu: MenuResult; settings: Sto
 
   return (
     <div className="min-h-dvh pb-28">
-      <StoreHeader settings={settings} />
+      <StoreHeader settings={settings} theme={theme} />
+      {settings?.schedule_enabled && <ReservationSheet settings={settings} />}
+      {settings?.schedule_enabled && reservation && (
+        <div className="border-b border-border bg-accent-soft">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm sm:px-6">
+            <CalendarCheck className="size-4 shrink-0" />
+            <span className="flex-1">
+              Reserva para <strong>{formatScheduled(spInstant(reservation.date, reservation.time).toISOString())}</strong>
+            </span>
+            <button type="button" onClick={() => setReservationOpen(true)} className="font-semibold hover:underline">
+              Alterar
+            </button>
+            <button type="button" onClick={clearReservation} className="font-semibold text-muted-foreground hover:underline">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       {settings && status.known && !status.open && (
         <div className="border-b border-border bg-warning-soft px-4 py-3 text-center text-sm font-medium text-warning-soft-foreground">

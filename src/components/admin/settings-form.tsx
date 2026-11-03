@@ -10,8 +10,9 @@ import { Field, Input } from "@/components/ui/field";
 import { Card, Skeleton } from "@/components/ui/misc";
 import { Switch } from "@/components/ui/switch";
 import { cn, maskPhone, onlyDigits, parseMoney } from "@/lib/format";
-import { hoursLabel, isOpenAt, nextOpening, WEEKDAYS, type OpeningHours } from "@/lib/hours";
+import { hoursLabel, isOpenAt, nextOpening, spNow, WEEKDAYS, type OpeningHours } from "@/lib/hours";
 import { cleanImageUrl } from "@/lib/menu-admin";
+import { activeTheme, carnivalWindow, FESTIVE, FESTIVE_IDS, PALETTE_IDS, PALETTES, type FestiveMode, type ThemeSettings } from "@/lib/themes";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
 import type { StoreSettings } from "@/types";
 import { ImageUpload } from "./image-upload";
@@ -50,6 +51,11 @@ const EMPTY: StoreSettings = {
   pickup_min: null,
   pickup_max: null,
   slot_capacity: null,
+  special_dates: [],
+  theme_palette: "purple",
+  festive_mode: "off",
+  festive_message: null,
+  festive_effects: true,
 };
 
 function SettingsLoader() {
@@ -106,6 +112,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     schedule_min_hours: String(initial.schedule_min_hours),
     schedule_max_days: String(initial.schedule_max_days),
     slot_capacity: initial.slot_capacity === null ? "" : String(initial.slot_capacity),
+    special_dates: initial.special_dates.map((d) => ({ key: `${d.date}-${d.title}`, date: d.date, title: d.title })),
     address: initial.address ?? "",
     delivery_enabled: initial.delivery_enabled,
     pickup_enabled: initial.pickup_enabled,
@@ -113,11 +120,16 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     delivery_max: minutesText(initial.delivery_max),
     pickup_min: minutesText(initial.pickup_min),
     pickup_max: minutesText(initial.pickup_max),
+    theme_palette: initial.theme_palette,
+    festive_mode: initial.festive_mode,
+    festive_message: initial.festive_message ?? "",
+    festive_effects: initial.festive_effects,
   });
   const [saving, setSaving] = useState(false);
   const [togglingOpen, setTogglingOpen] = useState(false);
   // what was last saved; the open/closed switch saves on its own, so it stays out
-  const snapshot = (f: typeof form) => JSON.stringify({ ...f, is_open: null, zones: f.zones.map((z) => [z.name, z.fee]) });
+  const snapshot = (f: typeof form) =>
+    JSON.stringify({ ...f, is_open: null, zones: f.zones.map((z) => [z.name, z.fee]), special_dates: f.special_dates.map((d) => [d.date, d.title]) });
   const [baseline, setBaseline] = useState(() => snapshot(form));
   useUnsavedChanges(snapshot(form) !== baseline);
   // last saved values; the open/closed switch saves on its own
@@ -165,6 +177,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     if (form.auto_hours && hours.length === 0) return toast.error("Marque ao menos um dia de funcionamento.");
     if (!Number.isInteger(minHours) || minHours < 0 || !Number.isInteger(maxDays) || maxDays < 1) return toast.error("Revise as regras de encomenda.");
     if (!form.delivery_enabled && !form.pickup_enabled) return toast.error("Ative a entrega ou a retirada.");
+    if (form.special_dates.some((d) => !d.date || !d.title.trim())) return toast.error("Preencha a data e o nome de cada data especial.");
     const eta = {
       delivery_min: parseMinutes(form.delivery_min),
       delivery_max: parseMinutes(form.delivery_max),
@@ -196,6 +209,11 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
         pickup_enabled: form.pickup_enabled,
         ...eta,
         slot_capacity: form.slot_capacity ? Number(form.slot_capacity) : null,
+        special_dates: form.special_dates.map((d) => ({ date: d.date, title: d.title.trim() })),
+        theme_palette: form.theme_palette,
+        festive_mode: form.festive_mode,
+        festive_message: form.festive_message.trim() || null,
+        festive_effects: form.festive_effects,
       });
       setForm((f) => ({ ...f, zones: saved.current.zones.map((z) => ({ key: z.id, name: z.name, fee: money(z.fee) })) }));
       setBaseline(snapshot(form));
@@ -277,6 +295,12 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
             </Field>
           </div>
         </Card>
+
+        <AppearanceCard
+          value={{ theme_palette: form.theme_palette, festive_mode: form.festive_mode, festive_message: form.festive_message, festive_effects: form.festive_effects }}
+          saved={saved}
+          onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
+        />
 
         <Card className="space-y-4 p-5">
           <SectionTitle title="Horário de funcionamento" description="No modo automático, a loja abre e fecha sozinha nestes horários." />
@@ -431,6 +455,56 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
               </Field>
             </div>
           )}
+          {form.schedule_enabled && (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Datas especiais da loja</p>
+              <p className="text-xs text-muted-foreground">
+                Feriados e datas comemorativas (Natal, Dia das Mães, Páscoa…) já aparecem sozinhos na agenda do cliente. Acrescente aqui as datas da sua loja, como a
+                festa da cidade ou o aniversário da loja.
+              </p>
+              <ul className="space-y-2">
+                {form.special_dates.map((d) => (
+                  <li key={d.key} className="flex items-center gap-2">
+                    <div className="w-40 shrink-0">
+                      <Input
+                        type="date"
+                        aria-label="Data especial"
+                        value={d.date}
+                        onChange={(e) => set("special_dates", form.special_dates.map((x) => (x.key === d.key ? { ...x, date: e.target.value } : x)))}
+                        className="h-10"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <Input
+                        aria-label="Nome da data"
+                        value={d.title}
+                        maxLength={40}
+                        onChange={(e) => set("special_dates", form.special_dates.map((x) => (x.key === d.key ? { ...x, title: e.target.value } : x)))}
+                        placeholder="Ex.: Festa da cidade"
+                        className="h-10"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => set("special_dates", form.special_dates.filter((x) => x.key !== d.key))}
+                      className="grid size-9 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-danger-soft hover:text-danger-soft-foreground"
+                      aria-label={`Remover ${d.title || "data"}`}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="soft"
+                size="sm"
+                onClick={() => set("special_dates", [...form.special_dates, { key: crypto.randomUUID(), date: "", title: "" }])}
+              >
+                <Plus className="size-4" />
+                Data especial
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* phones and tablets: a full-width bar above the bottom navigation; desktop: plain button at the end */}
@@ -441,6 +515,132 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
         </div>
       </form>
     </div>
+  );
+}
+
+type AppearanceForm = Omit<ThemeSettings, "festive_message"> & { festive_message: string };
+
+const FESTIVE_OPTIONS: { id: FestiveMode; label: string; swatch?: { primary: string; accent: string } }[] = [
+  { id: "off", label: "Desligado" },
+  { id: "auto", label: "Automático pelo calendário" },
+  ...FESTIVE_IDS.map((id) => ({ id, label: FESTIVE[id].label, swatch: FESTIVE[id] })),
+];
+
+const longDate = (iso: string) =>
+  new Intl.DateTimeFormat("pt-BR", { day: "numeric", month: "long", timeZone: "UTC" }).format(new Date(`${iso}T00:00:00Z`));
+
+/** Palette and festive theme. The choice previews on the whole page until it is left. */
+function AppearanceCard({
+  value,
+  saved,
+  onChange,
+}: {
+  value: AppearanceForm;
+  saved: React.RefObject<StoreSettings>;
+  onChange: (patch: Partial<AppearanceForm>) => void;
+}) {
+  const today = spNow(new Date()).date;
+  const preview = activeTheme({ ...value, festive_message: value.festive_message.trim() || null }, today);
+  useEffect(() => {
+    document.documentElement.dataset.palette = preview.palette;
+  }, [preview.palette]);
+  // leaving the page puts back what is saved (the layout only re-renders on save)
+  useEffect(() => {
+    const html = document.documentElement;
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the latest saved settings are wanted here, not the first ones
+      html.dataset.palette = activeTheme(saved.current, spNow(new Date()).date).palette;
+    };
+  }, [saved]);
+
+  const year = Number(today.slice(0, 4));
+  const carnival = [carnivalWindow(year), carnivalWindow(year + 1)].find((w) => w.end >= today) ?? carnivalWindow(year + 1);
+
+  return (
+    <Card className="space-y-5 p-5">
+      <SectionTitle title="Aparência" description="Cores do cardápio e do painel. Um tema festivo substitui a cor enquanto estiver ativo." />
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold">Cor</legend>
+        <div role="radiogroup" aria-label="Cor" className="flex flex-wrap gap-2">
+          {PALETTE_IDS.map((id) => (
+            <ThemeOption key={id} label={PALETTES[id].label} swatch={PALETTES[id]} checked={value.theme_palette === id} onSelect={() => onChange({ theme_palette: id })} />
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-semibold">Tema festivo</legend>
+        <div role="radiogroup" aria-label="Tema festivo" className="flex flex-wrap gap-2">
+          {FESTIVE_OPTIONS.map((o) => (
+            <ThemeOption key={o.id} label={o.label} swatch={o.swatch} checked={value.festive_mode === o.id} onSelect={() => onChange({ festive_mode: o.id })} />
+          ))}
+        </div>
+        {value.festive_mode === "auto" && (
+          <div className="rounded-md bg-surface-2 px-4 py-3 text-sm">
+            <p className="font-semibold">{preview.festive ? `Hoje: ${FESTIVE[preview.festive].label}.` : "Hoje: nenhum tema festivo, vale a cor escolhida."}</p>
+            <ul className="mt-1 space-y-0.5 text-muted-foreground">
+              <li>Natal: {FESTIVE.christmas.period}</li>
+              <li>Ano Novo: {FESTIVE.newyear.period}</li>
+              <li>
+                Carnaval: {longDate(carnival.start)} a {longDate(carnival.end)} de {carnival.end.slice(0, 4)}
+              </li>
+            </ul>
+          </div>
+        )}
+      </fieldset>
+
+      {value.festive_mode !== "off" && (
+        <div className="space-y-4">
+          <Field label="Mensagem da faixa" optional hint="Aparece no topo do cardápio enquanto o tema festivo estiver ativo. Vazio = mensagem do tema.">
+            {(p) => (
+              <Input
+                {...p}
+                value={value.festive_message}
+                onChange={(e) => onChange({ festive_message: e.target.value })}
+                placeholder={preview.festive ? FESTIVE[preview.festive].message : "Ex.: Boas festas! Encomende sua ceia."}
+                maxLength={80}
+              />
+            )}
+          </Field>
+          <div className="rounded-md bg-surface-2 px-4 py-1">
+            <Switch checked={value.festive_effects} onCheckedChange={(v) => onChange({ festive_effects: v })} label="Animação decorativa (neve, brilhos, confete)" />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ThemeOption({
+  label,
+  swatch,
+  checked,
+  onSelect,
+}: {
+  label: string;
+  swatch?: { primary: string; accent: string };
+  checked: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      onClick={onSelect}
+      className={cn(
+        "inline-flex h-11 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors",
+        checked ? "border-primary bg-primary-soft text-primary-soft-foreground" : "border-border-strong hover:bg-surface-2",
+      )}
+    >
+      {swatch && (
+        <span className="relative size-5 shrink-0 rounded-full" style={{ background: swatch.primary }} aria-hidden>
+          <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full ring-2 ring-surface" style={{ background: swatch.accent }} />
+        </span>
+      )}
+      {label}
+    </button>
   );
 }
 

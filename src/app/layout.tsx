@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Manrope } from "next/font/google";
 import { Providers } from "@/components/providers";
+import { getActiveTheme } from "@/lib/menu";
 import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -37,9 +38,16 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // palette chosen in the panel (or today's festive theme), for the whole site
+  const theme = await getActiveTheme();
   return (
-    <html lang="pt-BR" className={`${manrope.variable} h-full antialiased`} suppressHydrationWarning>
+    <html
+      lang="pt-BR"
+      className={`${manrope.variable} h-full antialiased`}
+      data-palette={theme.palette}
+      suppressHydrationWarning
+    >
       <body className="min-h-full">
         {/* visible only on keyboard focus; every page marks its content with id="conteudo" */}
         <a

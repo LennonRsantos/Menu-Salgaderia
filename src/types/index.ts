@@ -1,4 +1,5 @@
 import type { OpeningHours } from "@/lib/hours";
+import type { FestiveMode, PaletteId } from "@/lib/themes";
 
 // Domain types for the Postgres rows (see db/schema.sql).
 // Timestamps are converted to ISO strings when read.
@@ -38,6 +39,14 @@ export interface StoreSettings {
   pickup_max: number | null;
   /** Most scheduled orders per 30-minute slot; null = no limit. */
   slot_capacity: number | null;
+  /** The store's own special dates ("YYYY-MM-DD"), next to the national holidays. */
+  special_dates: { date: string; title: string }[];
+  theme_palette: PaletteId;
+  /** "auto" follows the calendar (see festiveFor). */
+  festive_mode: FestiveMode;
+  /** Menu banner while a festive theme is on; null = the theme's default. */
+  festive_message: string | null;
+  festive_effects: boolean;
 }
 
 export interface DeliveryZone {
@@ -127,6 +136,8 @@ export interface OrderItem {
   addons: OrderItemAddon[];
   notes: string | null;
   line_total: number;
+  /** Cost of one unit when ordered (ficha técnica, else stock links); absent when unknown. */
+  unit_cost?: number;
 }
 
 export interface Order {
@@ -200,4 +211,69 @@ export interface StockMovement {
   user_name: string | null;
   note: string | null;
   created_at: string;
+}
+
+export type CostInputKind = "ingredient" | "packaging" | "other";
+
+/** Something bought to make products. Unit cost = package_price / package_size. */
+export interface CostInput {
+  id: string;
+  name: string;
+  kind: CostInputKind;
+  /** Unit the recipes use (g, ml, un…). */
+  unit: string;
+  /** How many units one purchase holds. */
+  package_size: number;
+  package_price: number;
+  supplier: string | null;
+  updated_at: string;
+}
+
+export interface CostInputPrice {
+  id: number;
+  package_size: number;
+  package_price: number;
+  user_name: string | null;
+  created_at: string;
+}
+
+/** Input line (input_id + quantity) or free line (label + amount), per recipe or per unit. */
+export interface CostLine {
+  input_id: string | null;
+  label: string | null;
+  quantity: number | null;
+  amount: number | null;
+  per: "batch" | "unit";
+}
+
+/** Ficha técnica of a menu product: the recipe makes `yield` units. */
+export interface ProductCost {
+  product_id: string;
+  yield: number;
+  include_fixed: boolean;
+  lines: CostLine[];
+  updated_at: string;
+}
+
+export type ExpenseCategory = "gas" | "energy" | "water" | "rent" | "staff" | "internet" | "marketing" | "taxes" | "maintenance" | "other";
+
+export interface OperatingExpense {
+  id: string;
+  name: string;
+  category: ExpenseCategory;
+  amount: number;
+  /** Every month; otherwise once, on `date` ("YYYY-MM-DD"). */
+  recurring: boolean;
+  date: string | null;
+  active: boolean;
+  notes: string | null;
+}
+
+export interface CostSettings {
+  /** Units made per month, to share the expenses; null = units sold in the last 30 days. */
+  monthly_units: number | null;
+  /** Desired margin (%), for the suggested price. */
+  target_margin: number;
+  /** Taxes and card fees, as % of the price. */
+  sales_pct: number;
 }

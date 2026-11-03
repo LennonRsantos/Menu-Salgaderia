@@ -1,7 +1,7 @@
 import { Storefront } from "@/components/store/storefront";
-import { getMenu, getStoreSettings } from "@/lib/menu";
+import { getActiveTheme, getMenu, getStoreSettings } from "@/lib/menu";
 
 export default async function MenuPage() {
-  const [menu, settings] = await Promise.all([getMenu(), getStoreSettings()]);
-  return <Storefront menu={menu} settings={settings} />;
+  const [menu, settings, theme] = await Promise.all([getMenu(), getStoreSettings(), getActiveTheme()]);
+  return <Storefront menu={menu} settings={settings} theme={theme} />;
 }

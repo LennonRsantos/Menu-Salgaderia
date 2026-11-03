@@ -9,6 +9,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, ResponsiveCon
 import { toast } from "sonner";
 import { Card, EmptyState, Skeleton } from "@/components/ui/misc";
 import { cn, formatBRL, formatCompactBRL } from "@/lib/format";
+import { useMounted } from "@/lib/use-mounted";
 import { getDashboard, type DashboardResult, type DayPoint, type Metrics, type TopProduct } from "@/actions/dashboard";
 import { CashCard, CustomersCard, DataTable, Delta, HeatmapCard, NeighborhoodsCard, ProfitCard, TimesCard } from "./dashboard-sections";
 import { PageHeader, useProfile } from "./panel-shell";
@@ -18,6 +19,7 @@ type Extra = Omit<Extract<DashboardResult, { ok: true }>, "ok" | "metrics" | "se
 const RANGES = [7, 30, 90] as const;
 
 // Chart colors come from the validated tokens (--chart-1); SVG attributes need concrete values.
+// The mark follows the palette chosen in the panel (read from the page), these hexes are the fallback.
 const CHART = {
   light: { mark: "#7d3a8b", grid: "#ddd5c0", text: "#625a4c", surface: "#faf7ef" },
   dark: { mark: "#b072bc", grid: "#2e2a25", text: "#aaa194", surface: "#1b1916" },
@@ -38,7 +40,11 @@ export function Dashboard() {
 
 function DashboardContent() {
   const { resolvedTheme } = useTheme();
-  const colors = CHART[resolvedTheme === "dark" ? "dark" : "light"];
+  const mounted = useMounted();
+  const base = CHART[resolvedTheme === "dark" ? "dark" : "light"];
+  // read on each render: a light/dark switch re-renders through resolvedTheme
+  const mark = mounted && resolvedTheme ? getComputedStyle(document.documentElement).getPropertyValue("--chart-1").trim() : "";
+  const colors = { ...base, mark: mark || base.mark };
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [series, setSeries] = useState<DayPoint[] | null>(null);

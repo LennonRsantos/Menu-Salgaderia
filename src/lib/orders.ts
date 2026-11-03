@@ -1,5 +1,5 @@
 import "server-only";
-import type { Order, PublicOrder } from "@/types";
+import type { Order, OrderItem, PublicOrder } from "@/types";
 import { iso } from "./db";
 
 export const ORDER_COLUMNS = `id, code, public_token, customer_name, customer_phone, address, fulfillment, payment_method,
@@ -31,8 +31,17 @@ export function orderFromRow(r: Row): Order {
     dispatched_at: iso(r.dispatched_at),
     completed_at: iso(r.completed_at),
     cancelled_at: iso(r.cancelled_at),
-    order_items: (r.items as Order["order_items"]) ?? [],
+    order_items: withoutCost((r.items as Order["order_items"]) ?? []),
   };
+}
+
+/** Item costs are for the manager's dashboard only: never sent to staff screens or customers. */
+export function withoutCost(items: OrderItem[]): OrderItem[] {
+  return items.map((item) => {
+    const copy = { ...item };
+    delete copy.unit_cost;
+    return copy;
+  });
 }
 
 /** What the customer's tracking page may see: no phone, no internal ids. */

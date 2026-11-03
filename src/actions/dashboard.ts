@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdmin } from "@/lib/auth";
+import { variableCost } from "@/lib/costs";
+import { loadInputPrices, loadRecipes } from "@/lib/costs-db";
 import { query } from "@/lib/db";
 import type { PaymentMethod } from "@/types";
 
@@ -36,8 +38,10 @@ export interface Profit {
   /** Items only: delivery fees are not product sales. */
   items_revenue: number;
   cost: number;
-  /** Share of items revenue from orders that carried a stock cost. */
+  /** Share of items revenue from orders that carried a cost. */
   covered_revenue: number;
+  /** Operating expenses of the range: monthly ones pro rata, plus one-off ones dated in it. */
+  fixed_expenses: number;
   margins: { name: string; price: number; cost: number }[];
 }
 export interface HeatCell {
@@ -138,28 +142,27 @@ export async function getDashboard(days: number): Promise<DashboardResult> {
          group by 1 order by quantity desc, revenue desc limit 6`,
         [range],
       ),
-      // cost of goods: what sales took from stock (net of returns), at the cost of the moment
+      // cost of goods at the cost of the moment: the item costs kept in the order
+      // (fichas técnicas), or, for older orders, what the sale took from stock
       query<Omit<Profit, "margins">>(
         `with sold as (
-           select o.id, o.subtotal, coalesce(sum(-m.delta * coalesce(m.unit_cost, 0)), 0) as cost
-             from orders o left join stock_movements m on m.order_id = o.id and m.reason in ('sale', 'cancel')
-            where o.status <> 'cancelled' and ${IN_RANGE("o.created_at")}
-            group by o.id, o.subtotal)
-         select coalesce(sum(subtotal), 0) as items_revenue, coalesce(sum(cost), 0) as cost,
-                coalesce(sum(subtotal) filter (where cost > 0), 0) as covered_revenue
+           select o.subtotal,
+                  case when exists (select 1 from jsonb_array_elements(o.items) i where i ? 'unit_cost')
+                       then (select coalesce(sum((i->>'unit_cost')::numeric * (i->>'quantity')::int), 0) from jsonb_array_elements(o.items) i)
+                       else (select coalesce(sum(-m.delta * coalesce(m.unit_cost, 0)), 0) from stock_movements m
+                              where m.order_id = o.id and m.reason in ('sale', 'cancel'))
+                  end as cost
+             from orders o
+            where o.status <> 'cancelled' and ${IN_RANGE("o.created_at")})
+         select coalesce(sum(subtotal), 0) as items_revenue, coalesce(round(sum(cost), 2), 0) as cost,
+                coalesce(sum(subtotal) filter (where cost > 0), 0) as covered_revenue,
+                (select round(coalesce(sum(amount * $1::int / 30.0) filter (where recurring and active), 0)
+                              + coalesce(sum(amount) filter (where not recurring and date >= ${START}::date and date <= ${LOCAL}::date), 0), 2)
+                   from operating_expenses) as fixed_expenses
            from sold`,
         [range],
       ),
-      query<Profit["margins"][number]>(
-        `select p.name, p.price, sum(l.quantity * i.cost) as cost
-           from products p
-           join stock_links l on l.product_id = p.id and l.addon_id is null
-           join stock_items i on i.id = l.item_id
-          group by p.id, p.name, p.price
-         having sum(l.quantity * i.cost) > 0
-          order by (p.price - sum(l.quantity * i.cost)) / nullif(p.price, 0) nulls first, p.name
-          limit 10`,
-      ),
+      productMargins(),
       query<HeatCell>(
         `select extract(dow from ${local("created_at")})::int as dow, extract(hour from ${local("created_at")})::int as hour, count(*) as orders
            from orders where status <> 'cancelled' and ${IN_RANGE("created_at")}
@@ -233,6 +236,30 @@ export async function getDashboard(days: number): Promise<DashboardResult> {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro ao carregar o dashboard." };
   }
+}
+
+/** Current price minus the variable cost (ficha técnica, else stock links), lowest margins first. */
+async function productMargins(): Promise<Profit["margins"]> {
+  const [products, recipes, inputs, links] = await Promise.all([
+    query<{ id: string; name: string; price: number }>("select id, name, price from products"),
+    loadRecipes(query),
+    loadInputPrices(query),
+    query<{ product_id: string; cost: number }>(
+      `select l.product_id, sum(l.quantity * i.cost) as cost
+         from stock_links l join stock_items i on i.id = l.item_id where l.addon_id is null group by 1`,
+    ),
+  ]);
+  const recipeOf = new Map(recipes.map((r) => [r.product_id, r]));
+  const linkCost = new Map(links.map((l) => [l.product_id, Number(l.cost)]));
+  const margin = (m: { price: number; cost: number }) => (m.price > 0 ? (m.price - m.cost) / m.price : -Infinity);
+  return products
+    .map((p) => {
+      const recipe = recipeOf.get(p.id);
+      return { name: p.name, price: p.price, cost: recipe ? variableCost(recipe, inputs).total : (linkCost.get(p.id) ?? 0) };
+    })
+    .filter((m) => m.cost > 0)
+    .sort((a, b) => margin(a) - margin(b) || a.name.localeCompare(b.name))
+    .slice(0, 10);
 }
 
 export interface CashClosing {

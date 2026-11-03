@@ -1,14 +1,19 @@
 "use client";
 
-import { Bike, CalendarClock, Clock, MapPin, Receipt, ShoppingBag, Store } from "lucide-react";
+import { Bike, CalendarClock, Clock, MapPin, Receipt, ShoppingBag, Store, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { getMyAccount } from "@/actions/customer";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { loadRecentOrders } from "@/lib/cart-store";
 import { useMounted } from "@/lib/use-mounted";
+import { useReservation } from "@/lib/reservation-store";
 import { useStoreStatus } from "@/lib/use-store-status";
 import { cn, formatBRL, mapsLink } from "@/lib/format";
 import { etaLabel } from "@/lib/hours";
+import { DEFAULT_THEME, type ActiveTheme } from "@/lib/themes";
 import type { StoreSettings } from "@/types";
+import { FestiveBanner, FestiveEffects } from "./festive-decor";
 
 export const DEFAULT_STORE_NAME = "Menu Salgaderia e Confeitaria";
 
@@ -38,11 +43,22 @@ export function StoreLogo({ settings, size = 56 }: { settings: StoreSettings | n
   );
 }
 
-export function StoreHeader({ settings }: { settings: StoreSettings | null }) {
+export function StoreHeader({ settings, theme = DEFAULT_THEME }: { settings: StoreSettings | null; theme?: ActiveTheme }) {
   const mounted = useMounted();
   const recent = mounted ? (loadRecentOrders()[0] ?? null) : null;
 
   const status = useStoreStatus(settings);
+  const openReservation = useReservation((s) => s.setOpen);
+  const [firstName, setFirstName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getMyAccount()
+      .then((a) => !cancelled && setFirstName(a ? a.name.split(" ")[0] : null))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const isOpen = status.open;
   // with zones the fee depends on the neighborhood: show the lowest one
   const deliveryEta = etaLabel(settings?.delivery_min, settings?.delivery_max);
@@ -60,10 +76,12 @@ export function StoreHeader({ settings }: { settings: StoreSettings | null }) {
 
   return (
     <header className="relative overflow-hidden border-b border-border bg-surface">
+      <FestiveBanner theme={theme} />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-accent-soft to-transparent"
         aria-hidden
       />
+      <FestiveEffects theme={theme} />
       <div className="relative mx-auto flex max-w-5xl flex-col gap-4 px-4 pt-4 pb-5 sm:px-6">
         <div className="flex items-center justify-end gap-1">
           {recent && (
@@ -75,6 +93,14 @@ export function StoreHeader({ settings }: { settings: StoreSettings | null }) {
               Pedido #{recent.code}
             </Link>
           )}
+          <Link
+            href="/conta"
+            className="inline-flex h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold hover:bg-surface-2"
+            aria-label={firstName ? `Minha conta, ${firstName}` : "Entrar ou criar conta"}
+          >
+            <UserRound className="size-4" />
+            <span className="max-w-24 truncate">{firstName ?? "Entrar"}</span>
+          </Link>
           <ThemeToggle />
         </div>
         <div className="flex items-center gap-4">
@@ -165,6 +191,16 @@ export function StoreHeader({ settings }: { settings: StoreSettings | null }) {
               className={settings.pickup_enabled ? "col-span-2 sm:col-span-1" : undefined}
             />
           </div>
+        )}
+        {settings?.schedule_enabled && (
+          <button
+            type="button"
+            onClick={() => openReservation(true)}
+            className="flex w-full items-center justify-center gap-2 rounded-md border border-accent bg-accent-soft px-4 py-2.5 text-sm font-semibold transition-colors hover:brightness-95 sm:w-auto sm:self-start dark:hover:brightness-125"
+          >
+            <CalendarClock className="size-4" />
+            Reservar para outro dia
+          </button>
         )}
       </div>
     </header>

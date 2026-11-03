@@ -11,13 +11,15 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Card, ChoiceGroup, EmptyState, Skeleton } from "@/components/ui/misc";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cartTotals, loadCustomer, rememberOrder, saveCustomer, useCart } from "@/lib/cart-store";
-import { formatBRL, mapsLink, maskPhone, maskZip, onlyDigits, parseMoney } from "@/lib/format";
-import { etaLabel, formatScheduled, spInstant } from "@/lib/hours";
+import { cn, formatBRL, mapsLink, maskPhone, maskZip, onlyDigits, parseMoney } from "@/lib/format";
+import { etaLabel, formatScheduled, scheduleDays, spInstant } from "@/lib/hours";
+import { useReservation } from "@/lib/reservation-store";
 import { useStoreStatus } from "@/lib/use-store-status";
 import { deliveryFeeFor, findZone } from "@/lib/zones";
 import { useMounted } from "@/lib/use-mounted";
 import { checkoutSchema, fieldErrors } from "@/lib/validators";
 import type { Fulfillment, PaymentMethod, StoreSettings } from "@/types";
+import { getMyAccount, type CustomerAccount } from "@/actions/customer";
 import { getFullSlots } from "@/actions/schedule";
 import { CartLine } from "./cart";
 import { SchedulePicker } from "./schedule-picker";
@@ -77,6 +79,17 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
   const router = useRouter();
   const items = useCart((s) => s.items);
   const clear = useCart((s) => s.clear);
+  // a day booked from the menu ("Reservar") starts the agenda, if it is still open
+  const [booked] = useState(() => {
+    const r = useReservation.getState().value;
+    const valid = Boolean(
+      r && settings?.schedule_enabled && scheduleDays(settings, new Date()).some((d) => d.date === r.date && d.slots.includes(r.time)),
+    );
+    return { reservation: valid ? r : null, expired: Boolean(r) && !valid };
+  });
+  useEffect(() => {
+    if (booked.expired) useReservation.getState().clear();
+  }, [booked.expired]);
   const [form, setForm] = useState<Form>(() => {
     const saved = loadCustomer();
     return {
@@ -94,9 +107,9 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
       needs_change: false,
       change_for: "",
       notes: "",
-      when: "asap",
-      date: "",
-      time: "",
+      when: booked.reservation ? "scheduled" : "asap",
+      date: booked.reservation?.date ?? "",
+      time: booked.reservation?.time ?? "",
       otherZone: false,
     };
   });
@@ -104,6 +117,36 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
   const [submitting, setSubmitting] = useState(false);
   const [zipLoading, setZipLoading] = useState(false);
   const [fullSlots, setFullSlots] = useState<string[]>([]);
+  // signed-in customers: name, WhatsApp and saved addresses come from the account
+  const [account, setAccount] = useState<CustomerAccount | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getMyAccount()
+      .then((a) => {
+        if (cancelled || !a) return;
+        setAccount(a);
+        setForm((f) => ({ ...f, name: a.name, phone: maskPhone(a.phone) }));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function fillSavedAddress(a: CustomerAccount["addresses"][number]) {
+    const zone = findZone(zones, a.neighborhood);
+    setForm((f) => ({
+      ...f,
+      zip: a.zip ? maskZip(a.zip) : "",
+      street: a.street,
+      number: a.number,
+      complement: a.complement ?? "",
+      neighborhood: zone ? zone.name : a.neighborhood,
+      otherZone: zones.length > 0 && !zone,
+      city: a.city,
+      reference: a.reference ?? "",
+    }));
+  }
 
   const status = useStoreStatus(settings);
   const zones = settings?.zones ?? [];
@@ -255,6 +298,7 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
     rememberOrder({ token: result.public_token, code: result.code, createdAt: new Date().toISOString() });
     router.replace(`/pedido/${result.public_token}`);
     clear();
+    useReservation.getState().clear();
     toast.success(`Pedido #${result.code} recebido! Envie também pelo WhatsApp.`);
   }
 
@@ -307,6 +351,21 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
               </Field>
             </div>
           </div>
+          {account ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Pedindo com a conta de <strong className="text-foreground">{account.email}</strong>.{" "}
+              <Link href="/conta" className="font-semibold text-primary-soft-foreground hover:underline">
+                Minha conta
+              </Link>
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-muted-foreground">
+              <Link href="/conta" className="font-semibold text-primary-soft-foreground hover:underline">
+                Crie sua conta ou entre
+              </Link>{" "}
+              para pedir mais rápido: seus dados e endereços ficam salvos.
+            </p>
+          )}
         </Section>
 
 
@@ -341,6 +400,32 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
               },
             ].filter((o) => modes.includes(o.value))}
           />
+          {fulfillment === "delivery" && account && account.addresses.length > 0 && (
+            <div className="mt-5">
+              <p className="mb-2 text-sm font-semibold">Endereços salvos</p>
+              <div className="flex flex-wrap gap-2">
+                {account.addresses.map((a, i) => {
+                  const active = form.street === a.street && form.number === a.number && form.complement === (a.complement ?? "");
+                  return (
+                    <button
+                      key={`${a.street}-${a.number}-${i}`}
+                      type="button"
+                      onClick={() => fillSavedAddress(a)}
+                      aria-pressed={active}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                        active ? "border-primary bg-primary-soft text-primary-soft-foreground" : "border-border-strong bg-surface hover:bg-surface-2",
+                      )}
+                    >
+                      <MapPin className="size-3.5" />
+                      {a.street}, {a.number}
+                      {a.complement ? ` · ${a.complement}` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {fulfillment === "delivery" && (
             <div className="mt-5 grid animate-fade-in gap-4 sm:grid-cols-6">
               <div className="sm:col-span-2" {...field("zip")}>
@@ -465,6 +550,11 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
             title={fulfillment === "pickup" ? "Quando você quer retirar?" : "Quando você quer receber?"}
             description="Veja a agenda da loja e escolha o dia e o horário."
           >
+            {booked.expired && (
+              <p className="mb-3 rounded-md bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+                O horário que você tinha reservado não está mais disponível. Escolha outro na agenda.
+              </p>
+            )}
             {mustSchedule ? (
               <p className="mb-4 rounded-md bg-accent-soft px-3 py-2.5 text-sm">
                 {scheduleOnly

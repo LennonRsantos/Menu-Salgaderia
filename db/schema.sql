@@ -194,3 +194,117 @@ alter table store_settings add column if not exists pickup_max int check (pickup
 
 -- Most orders one 30-minute scheduling slot takes; null = no limit.
 alter table store_settings add column if not exists slot_capacity int check (slot_capacity between 1 and 500);
+
+-- Customer accounts (Neon Auth). Kept apart from the phone-keyed customers base:
+-- signing up with someone else's number never exposes their past orders.
+create table if not exists customer_accounts (
+  user_id             text primary key,
+  name                text not null,
+  phone               text not null unique,
+  email               text not null,
+  birthday            date,
+  referral_source     text,
+  marketing_opt_in    boolean not null default false,
+  marketing_opt_in_at timestamptz,
+  privacy_accepted_at timestamptz not null,
+  addresses           jsonb not null default '[]'::jsonb,
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
+);
+-- Internal notes about a customer (also for those who order without an account).
+alter table customers add column if not exists staff_notes text;
+-- Set when the order was placed while signed in to a customer account.
+alter table orders add column if not exists customer_user_id text;
+create index if not exists orders_customer_user_idx on orders (customer_user_id);
+create index if not exists orders_customer_phone_idx on orders (customer_phone);
+
+-- The store's own special dates (local festivities, anniversaries), shown next
+-- to the national holidays when customers book a day.
+create table if not exists special_dates (
+  id    uuid primary key default gen_random_uuid(),
+  date  date not null,
+  title text not null
+);
+
+-- Costs (admin only). Kept apart from stock: recipes only price the products,
+-- sales never take ingredients. A unit cost is package_price / package_size.
+create table if not exists cost_inputs (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,
+  kind          text not null check (kind in ('ingredient', 'packaging', 'other')),
+  unit          text not null default 'un',
+  package_size  numeric(12, 4) not null default 1 check (package_size > 0),
+  package_price numeric(10, 2) not null default 0 check (package_price >= 0),
+  supplier      text,
+  updated_at    timestamptz not null default now()
+);
+
+-- Every price an input had, newest last.
+create table if not exists cost_input_prices (
+  id            bigint generated always as identity primary key,
+  input_id      uuid not null references cost_inputs (id) on delete cascade,
+  package_size  numeric(12, 4) not null,
+  package_price numeric(10, 2) not null,
+  user_name     text,
+  created_at    timestamptz not null default now()
+);
+create index if not exists cost_input_prices_input_idx on cost_input_prices (input_id, created_at desc);
+
+-- Ficha técnica: one per menu product. The recipe makes `yield` units;
+-- include_fixed adds the product's share of the monthly expenses.
+create table if not exists product_costs (
+  product_id    uuid primary key references products (id) on delete cascade,
+  yield         numeric(10, 2) not null default 1 check (yield > 0),
+  include_fixed boolean not null default true,
+  updated_at    timestamptz not null default now()
+);
+
+-- An input line (input_id + quantity) or a free line (label + amount in R$),
+-- for the whole recipe ('batch', divided by yield) or for each unit.
+create table if not exists product_cost_lines (
+  id         bigint generated always as identity primary key,
+  product_id uuid not null references product_costs (product_id) on delete cascade,
+  input_id   uuid references cost_inputs (id) on delete restrict,
+  label      text,
+  quantity   numeric(12, 4),
+  amount     numeric(10, 4),
+  per        text not null default 'batch' check (per in ('batch', 'unit')),
+  position   int not null default 0,
+  check ((input_id is not null and quantity > 0) or (input_id is null and label is not null and amount >= 0))
+);
+create index if not exists product_cost_lines_product_idx on product_cost_lines (product_id);
+create index if not exists product_cost_lines_input_idx on product_cost_lines (input_id);
+
+-- Operating expenses: every month (recurring) or once, on `date`.
+create table if not exists operating_expenses (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  category   text not null check (category in ('gas', 'energy', 'water', 'rent', 'staff', 'internet', 'marketing', 'taxes', 'maintenance', 'other')),
+  amount     numeric(10, 2) not null check (amount >= 0),
+  recurring  boolean not null default true,
+  date       date,
+  active     boolean not null default true,
+  notes      text,
+  created_at timestamptz not null default now(),
+  check (recurring or date is not null)
+);
+
+-- monthly_units: units made per month, to share the expenses (null = units sold
+-- in the last 30 days). sales_pct: taxes and card fees, as % of the price.
+create table if not exists cost_settings (
+  id            int primary key default 1 check (id = 1),
+  monthly_units int check (monthly_units > 0),
+  target_margin int not null default 60 check (target_margin between 1 and 95),
+  sales_pct     numeric(5, 2) not null default 0 check (sales_pct between 0 and 50)
+);
+insert into cost_settings (id) values (1) on conflict do nothing;
+
+-- Appearance: color palette and festive theme (see src/lib/themes.ts). A festive
+-- theme ('auto' follows the calendar) replaces the palette while it lasts.
+alter table store_settings add column if not exists theme_palette text not null default 'purple'
+  check (theme_palette in ('purple', 'wine', 'green', 'blue', 'terracotta'));
+alter table store_settings add column if not exists festive_mode text not null default 'off'
+  check (festive_mode in ('off', 'auto', 'christmas', 'newyear', 'carnival'));
+-- Banner text on the menu; null = the theme's default message.
+alter table store_settings add column if not exists festive_message text;
+alter table store_settings add column if not exists festive_effects boolean not null default true;

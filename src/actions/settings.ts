@@ -6,7 +6,8 @@ import { requireAdmin } from "@/lib/auth";
 import { query, transaction } from "@/lib/db";
 import { cleanHours } from "@/lib/hours";
 import { cleanImageUrl } from "@/lib/menu-admin";
-import { SETTINGS_COLUMNS, SETTINGS_TAG, settingsFromRow, ZONES_SQL } from "@/lib/menu";
+import { SETTINGS_COLUMNS, SETTINGS_TAG, settingsFromRow, SPECIAL_DATES_SQL, ZONES_SQL } from "@/lib/menu";
+import { FESTIVE_MODES, PALETTE_IDS } from "@/lib/themes";
 import type { DeliveryZone, StoreSettings } from "@/types";
 
 export type SettingsResult = { ok: true; settings: StoreSettings | null } | { ok: false; error: string };
@@ -20,11 +21,12 @@ const message = (e: unknown) =>
 export async function getSettingsAdmin(): Promise<SettingsResult> {
   try {
     await requireAdmin();
-    const [[row], zones] = await Promise.all([
+    const [[row], zones, dates] = await Promise.all([
       query(`select ${SETTINGS_COLUMNS} from store_settings where id = 1`),
       query<DeliveryZone>(ZONES_SQL),
+      query<StoreSettings["special_dates"][number]>(SPECIAL_DATES_SQL),
     ]);
-    return { ok: true, settings: row ? settingsFromRow(row, zones) : null };
+    return { ok: true, settings: row ? settingsFromRow(row, zones, dates) : null };
   } catch (e) {
     return { ok: false, error: message(e) };
   }
@@ -67,6 +69,18 @@ const settingsSchema = z.object({
   pickup_min: minutes,
   pickup_max: minutes,
   slot_capacity: z.number().int().min(1, "O limite por horário deve ser ao menos 1.").max(500).nullable(),
+  special_dates: z
+    .array(
+      z.object({
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data especial inválida."),
+        title: z.string().trim().min(1, "Dê um nome a cada data especial.").max(40),
+      }),
+    )
+    .max(100),
+  theme_palette: z.enum(PALETTE_IDS, { error: "Cor inválida." }),
+  festive_mode: z.enum(FESTIVE_MODES, { error: "Tema festivo inválido." }),
+  festive_message: optionalText(80),
+  festive_effects: z.boolean(),
 });
 
 export async function saveSettings(input: SettingsInput): Promise<SettingsResult> {
@@ -87,8 +101,10 @@ export async function saveSettings(input: SettingsInput): Promise<SettingsResult
       const { rows } = await db.query(
         `insert into store_settings (id, name, tagline, phone, logo_url, delivery_fee, min_order, is_open, opening_hours,
            auto_hours, hours, other_zones, schedule_enabled, schedule_min_hours, schedule_max_days,
-           address, delivery_enabled, pickup_enabled, delivery_min, delivery_max, pickup_min, pickup_max, slot_capacity, updated_at)
-         values (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, now())
+           address, delivery_enabled, pickup_enabled, delivery_min, delivery_max, pickup_min, pickup_max, slot_capacity,
+           theme_palette, festive_mode, festive_message, festive_effects, updated_at)
+         values (1, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22,
+           $23, $24, $25, $26, now())
          on conflict (id) do update set name = excluded.name, tagline = excluded.tagline, phone = excluded.phone,
            logo_url = excluded.logo_url, delivery_fee = excluded.delivery_fee, min_order = excluded.min_order,
            is_open = excluded.is_open, opening_hours = excluded.opening_hours, auto_hours = excluded.auto_hours,
@@ -96,7 +112,9 @@ export async function saveSettings(input: SettingsInput): Promise<SettingsResult
            schedule_min_hours = excluded.schedule_min_hours, schedule_max_days = excluded.schedule_max_days,
            address = excluded.address, delivery_enabled = excluded.delivery_enabled, pickup_enabled = excluded.pickup_enabled,
            delivery_min = excluded.delivery_min, delivery_max = excluded.delivery_max,
-           pickup_min = excluded.pickup_min, pickup_max = excluded.pickup_max, slot_capacity = excluded.slot_capacity, updated_at = now()
+           pickup_min = excluded.pickup_min, pickup_max = excluded.pickup_max, slot_capacity = excluded.slot_capacity,
+           theme_palette = excluded.theme_palette, festive_mode = excluded.festive_mode,
+           festive_message = excluded.festive_message, festive_effects = excluded.festive_effects, updated_at = now()
          returning ${SETTINGS_COLUMNS}`,
         [
           s.name,
@@ -121,6 +139,10 @@ export async function saveSettings(input: SettingsInput): Promise<SettingsResult
           s.pickup_min,
           s.pickup_max,
           s.slot_capacity,
+          s.theme_palette,
+          s.festive_mode,
+          s.festive_message,
+          s.festive_effects,
         ],
       );
 
@@ -133,8 +155,14 @@ export async function saveSettings(input: SettingsInput): Promise<SettingsResult
          select z.name, z.fee, z.n from unnest($1::text[], $2::numeric[]) with ordinality as z(name, fee, n)`,
         [list.map((z) => z.name), list.map((z) => z.fee)],
       );
+      await db.query("delete from special_dates");
+      await db.query(
+        "insert into special_dates (date, title) select d.date, d.title from unnest($1::date[], $2::text[]) as d(date, title)",
+        [s.special_dates.map((d) => d.date), s.special_dates.map((d) => d.title)],
+      );
       const saved = (await db.query<DeliveryZone>(ZONES_SQL)).rows;
-      return settingsFromRow(rows[0], saved);
+      const dates = (await db.query<StoreSettings["special_dates"][number]>(SPECIAL_DATES_SQL)).rows;
+      return settingsFromRow(rows[0], saved, dates);
     });
 
     updateTag(SETTINGS_TAG);

@@ -50,6 +50,10 @@
   --animate-fade-in: fade-in 160ms ease-out;
   --animate-sheet-up: sheet-up 220ms cubic-bezier(0.32, 0.72, 0, 1);
   --animate-pop: pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* festive decorations on the menu header; each particle sets its own duration and delay */
+  --animate-snow-fall: snow-fall 9s linear infinite;
+  --animate-confetti-fall: confetti-fall 7s linear infinite;
+  --animate-sparkle: sparkle 2.4s ease-in-out infinite;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -63,6 +67,20 @@
     0% { transform: scale(0.96); }
     50% { transform: scale(1.03); }
     100% { transform: scale(1); }
+  }
+  @keyframes snow-fall {
+    from { transform: translate3d(0, -20px, 0); opacity: 0; }
+    10% { opacity: 1; }
+    to { transform: translate3d(24px, 320px, 0); opacity: 0; }
+  }
+  @keyframes confetti-fall {
+    from { transform: translate3d(0, -20px, 0) rotate(0deg); opacity: 0; }
+    10% { opacity: 1; }
+    to { transform: translate3d(-18px, 320px, 0) rotate(540deg); opacity: 0; }
+  }
+  @keyframes sparkle {
+    0%, 100% { transform: scale(0.4); opacity: 0; }
+    50% { transform: scale(1); opacity: 1; }
   }
 }
 
@@ -86,7 +104,7 @@
 
   --accent: var(--color-gold-500);
   --accent-foreground: #141210;
-  --accent-soft: rgb(201 184 74 / 0.22);
+  --accent-soft: color-mix(in srgb, var(--color-gold-500) 22%, transparent);
 
   --danger: #dc2626;
   --danger-soft: #fef2f2;
@@ -122,14 +140,14 @@
   --primary: var(--color-brand-300);
   --primary-hover: var(--color-brand-200);
   --primary-foreground: #141210;
-  --primary-soft: rgb(203 159 211 / 0.14);
-  --primary-soft-hover: rgb(203 159 211 / 0.22);
+  --primary-soft: color-mix(in srgb, var(--color-brand-300) 14%, transparent);
+  --primary-soft-hover: color-mix(in srgb, var(--color-brand-300) 22%, transparent);
   --primary-soft-foreground: var(--color-brand-200);
   --ring: var(--color-brand-300);
 
   --accent: var(--color-gold-400);
   --accent-foreground: #141210;
-  --accent-soft: rgb(211 196 99 / 0.16);
+  --accent-soft: color-mix(in srgb, var(--color-gold-400) 16%, transparent);
 
   --danger: #f87171;
   --danger-soft: rgb(248 113 113 / 0.12);
@@ -151,6 +169,132 @@
   --chart-1: var(--color-brand-400);
 
   color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Palettes and festive themes (src/lib/themes.ts), set as html[data-palette]
+   by the root layout. They swap only the brand and gold ramps: the semantic
+   tokens above keep their steps (700 = light primary, 300 = dark primary),
+   and neutrals stay the same. No attribute (or "purple") = the brand palette.
+   --------------------------------------------------------------------------- */
+
+html[data-palette="wine"] {
+  --color-brand-50: #fbf1f2;
+  --color-brand-100: #f6e0e3;
+  --color-brand-200: #ecc0c6;
+  --color-brand-300: #de94a0;
+  --color-brand-400: #c9637a;
+  --color-brand-500: #b03f5a;
+  --color-brand-600: #962c47;
+  --color-brand-700: #7f213b;
+  --color-brand-800: #681c31;
+  --color-brand-900: #521827;
+  --color-brand-950: #320c17;
+}
+
+html[data-palette="green"] {
+  --color-brand-50: #f1f7f1;
+  --color-brand-100: #ddecdd;
+  --color-brand-200: #bad9bc;
+  --color-brand-300: #8ebf93;
+  --color-brand-400: #5f9f67;
+  --color-brand-500: #3f8249;
+  --color-brand-600: #2f6a39;
+  --color-brand-700: #27562f;
+  --color-brand-800: #214528;
+  --color-brand-900: #1c3922;
+  --color-brand-950: #0d1f11;
+}
+
+html[data-palette="blue"] {
+  --color-brand-50: #f0f5fb;
+  --color-brand-100: #dde8f5;
+  --color-brand-200: #bed3ec;
+  --color-brand-300: #90b4de;
+  --color-brand-400: #5f8fcc;
+  --color-brand-500: #3e70b5;
+  --color-brand-600: #2f5898;
+  --color-brand-700: #27477c;
+  --color-brand-800: #233c66;
+  --color-brand-900: #1f3354;
+  --color-brand-950: #121f36;
+}
+
+html[data-palette="terracotta"] {
+  --color-brand-50: #fcf4f0;
+  --color-brand-100: #f8e4da;
+  --color-brand-200: #f0c6b2;
+  --color-brand-300: #e5a083;
+  --color-brand-400: #d67652;
+  --color-brand-500: #c25a35;
+  --color-brand-600: #a6462a;
+  --color-brand-700: #883825;
+  --color-brand-800: #6e2f22;
+  --color-brand-900: #5a291f;
+  --color-brand-950: #31130d;
+}
+
+/* Christmas: red with pine green details */
+html[data-palette="christmas"] {
+  --color-brand-50: #fdf2f2;
+  --color-brand-100: #fbe2e2;
+  --color-brand-200: #f6c3c3;
+  --color-brand-300: #ee9595;
+  --color-brand-400: #e15e5e;
+  --color-brand-500: #cc3a3a;
+  --color-brand-600: #b02a2a;
+  --color-brand-700: #922323;
+  --color-brand-800: #791f1f;
+  --color-brand-900: #641e1e;
+  --color-brand-950: #370b0b;
+
+  --color-gold-300: #8fd0a5;
+  --color-gold-400: #5cb87b;
+  --color-gold-500: #3f9c5e;
+  --color-gold-600: #2f7d4a;
+  --color-gold-700: #24613a;
+}
+
+/* New Year: midnight blue with champagne gold */
+html[data-palette="newyear"] {
+  --color-brand-50: #f1f3fa;
+  --color-brand-100: #e2e6f4;
+  --color-brand-200: #c5cce8;
+  --color-brand-300: #9ea9d6;
+  --color-brand-400: #737fbf;
+  --color-brand-500: #535ea6;
+  --color-brand-600: #414a8b;
+  --color-brand-700: #353b72;
+  --color-brand-800: #2c315d;
+  --color-brand-900: #262a4d;
+  --color-brand-950: #15172b;
+
+  --color-gold-300: #e8d48f;
+  --color-gold-400: #dfc365;
+  --color-gold-500: #d4af37;
+  --color-gold-600: #b08f24;
+  --color-gold-700: #87701f;
+}
+
+/* Carnival: magenta with sunny yellow */
+html[data-palette="carnival"] {
+  --color-brand-50: #fdf2f8;
+  --color-brand-100: #fce7f3;
+  --color-brand-200: #fbcfe8;
+  --color-brand-300: #f9a8d4;
+  --color-brand-400: #f472b6;
+  --color-brand-500: #e64399;
+  --color-brand-600: #cc2a7f;
+  --color-brand-700: #a91f67;
+  --color-brand-800: #8a1c55;
+  --color-brand-900: #721a48;
+  --color-brand-950: #460828;
+
+  --color-gold-300: #fde58a;
+  --color-gold-400: #fbd84f;
+  --color-gold-500: #f5c518;
+  --color-gold-600: #cfa30c;
+  --color-gold-700: #9c7a0b;
 }
 
 @theme inline {

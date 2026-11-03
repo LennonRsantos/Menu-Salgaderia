@@ -64,10 +64,7 @@ O app usa servidor (server actions, route handlers e cache), então **não funci
    ```bash
    neon neon-auth domain add https://seu-dominio.vercel.app
    ```
-4. **Cadastro público:** feche o cadastro pelo Neon Auth, depois de criar o primeiro gerente.
-   ```bash
-   neon neon-auth config email-password update --disable-sign-up true
-   ```
+4. **Cadastro de clientes:** **não** desligue o cadastro no Neon Auth, porque os clientes criam conta por ele. A equipe continua protegida: só quem está na tabela `staff` entra no painel.
 5. **Loja:** no painel, em Loja, preencha:
    - o WhatsApp real;
    - o endereço;
@@ -114,6 +111,20 @@ Regras de acesso:
 - **Taxa por bairro** (Loja → Entrega): com bairros cadastrados (`delivery_zones`), o cliente escolhe o bairro e a taxa sai da lista. Um bairro fora dela paga a taxa padrão ou é recusado, conforme o switch "Entregar em outros bairros". A mesma função (`deliveryFeeFor`, em `src/lib/zones.ts`) calcula a prévia no checkout e o valor final no servidor.
 - **Endereço, tempos e modos** (Loja): o endereço aparece no topo do cardápio, com link para o mapa, e para quem vai retirar. Os tempos estimados de entrega e de retirada (em minutos, "de/a") aparecem no cardápio, no checkout e no acompanhamento. Os switches "Fazer entregas" e "Aceitar retirada" ligam e desligam cada modo; o checkout mostra só os ativos e o `buildOrder` recusa o que estiver desligado.
 - **Agendamento** (Loja → Agendamento): o cliente vê a agenda da loja no checkout, com os próximos dias (os dias fechados aparecem apagados) e os horários livres de 30 em 30 minutos. Ele marca o dia e o horário da retirada ou da entrega (`orders.scheduled_for`), mesmo com a loja fechada agora. Valem a antecedência mínima, o limite de dias e o horário de funcionamento (`scheduleDays` e `scheduleError`, em `src/lib/hours.ts`).
+- **Reserva pelo cardápio e datas especiais:** com o agendamento ligado, o botão "Reservar para outro dia" abre a agenda direto no cardápio. O dia escolhido fica numa faixa no topo e vai pronto para o checkout (`src/lib/reservation-store.ts`).
+  - A agenda destaca feriados e datas comemorativas (Natal, Páscoa, Dia das Mães, Carnaval…), calculados em `src/lib/special-dates.ts`.
+  - As datas próprias da loja são cadastradas em Loja → Agendamento (tabela `special_dates`).
+- **Contas de clientes** (`/conta`): o cliente cria conta com nome, WhatsApp, e-mail e senha (Neon Auth), e opcionalmente aniversário, como conheceu a loja e o aceite de ofertas (LGPD, com data), com o aceite da Política de Privacidade (`/privacidade`).
+  - Logado, o checkout preenche os dados e oferece os endereços salvos; cada pedido fica ligado à conta (`orders.customer_user_id`).
+  - Em "Meus pedidos" aparecem só os pedidos feitos com a conta, com "Pedir de novo".
+  - A conta (`customer_accounts`) fica separada da base por telefone (`customers`): quem se cadastra com o número de outra pessoa não vê os pedidos dela.
+- **Clientes no painel** (`/admin/clientes`, só gerente):
+  - total gasto, pedidos, ticket médio, primeiro e último pedido e produto favorito;
+  - os dados do cadastro, os endereços e o histórico;
+  - anotações da equipe;
+  - filtros (com/sem conta, aniversariantes do mês, aceitam ofertas, sumidos);
+  - exportação em CSV;
+  - "Redefinir senha", que gera uma senha temporária para o cliente que esqueceu a dele.
   - Com "Pedidos por horário" (`slot_capacity`), o horário cheio aparece como "Lotado". O `placeOrder` trava o horário (`pg_advisory_xact_lock`) e recusa quando ele lota.
   - A encomenda só baixa o estoque quando a loja aceita o pedido. Um produto esgotado hoje aparece como "Só por encomenda".
   - A página **Encomendas** do painel mostra os próximos dias e a lista de produção de cada dia.
