@@ -5,11 +5,11 @@
 export default function GlobalError({ retry }: { error: unknown; retry: () => void }) {
   return (
     <html lang="pt-BR">
-      <body style={{ margin: 0, minHeight: "100dvh", display: "grid", placeItems: "center", fontFamily: "system-ui, sans-serif", background: "#ece6d6", color: "#141210" }}>
+      <body style={{ margin: 0, minHeight: "100dvh", display: "grid", placeItems: "center", fontFamily: "system-ui, sans-serif", background: "#f7f1f5", color: "#1a1218" }}>
         <title>Algo deu errado · Menu</title>
         <main style={{ textAlign: "center", padding: 24 }}>
           <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>Algo deu errado</h1>
-          <p style={{ margin: "0 0 20px", color: "#625a4c" }}>Não conseguimos abrir o site agora. Tente de novo em instantes.</p>
+          <p style={{ margin: "0 0 20px", color: "#63555d" }}>Não conseguimos abrir o site agora. Tente de novo em instantes.</p>
           <button
             type="button"
             onClick={() => retry()}

@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { Card, Skeleton } from "@/components/ui/misc";
 import { Switch } from "@/components/ui/switch";
-import { cn, maskPhone, onlyDigits, parseMoney } from "@/lib/format";
+import { cn, maskPhone, maskZip, onlyDigits, parseMoney } from "@/lib/format";
 import { hoursLabel, isOpenAt, nextOpening, spNow, WEEKDAYS, type OpeningHours } from "@/lib/hours";
+import { formatCepAddress, lookupCep, type CepAddress } from "@/lib/cep";
 import { cleanImageUrl } from "@/lib/menu-admin";
 import { activeTheme, carnivalWindow, FESTIVE, FESTIVE_IDS, PALETTE_IDS, PALETTES, type FestiveMode, type ThemeSettings } from "@/lib/themes";
 import { useUnsavedChanges } from "@/lib/use-unsaved-changes";
@@ -42,7 +43,7 @@ const EMPTY: StoreSettings = {
   zones: [],
   schedule_enabled: false,
   schedule_min_hours: 24,
-  schedule_max_days: 30,
+  schedule_max_days: 60,
   address: null,
   delivery_enabled: true,
   pickup_enabled: true,
@@ -56,6 +57,8 @@ const EMPTY: StoreSettings = {
   festive_mode: "off",
   festive_message: null,
   festive_effects: true,
+  header_image_url: null,
+  address_zip: null,
 };
 
 function SettingsLoader() {
@@ -114,6 +117,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     slot_capacity: initial.slot_capacity === null ? "" : String(initial.slot_capacity),
     special_dates: initial.special_dates.map((d) => ({ key: `${d.date}-${d.title}`, date: d.date, title: d.title })),
     address: initial.address ?? "",
+    address_zip: initial.address_zip ? maskZip(initial.address_zip) : "",
     delivery_enabled: initial.delivery_enabled,
     pickup_enabled: initial.pickup_enabled,
     delivery_min: minutesText(initial.delivery_min),
@@ -124,6 +128,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     festive_mode: initial.festive_mode,
     festive_message: initial.festive_message ?? "",
     festive_effects: initial.festive_effects,
+    header_image_url: initial.header_image_url,
   });
   const [saving, setSaving] = useState(false);
   const [togglingOpen, setTogglingOpen] = useState(false);
@@ -136,6 +141,27 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
   const saved = useRef(initial);
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  // CEP lookup: the address is rebuilt only after a lookup here, so a hand-edited saved address stays as it is
+  const [cep, setCep] = useState<CepAddress | null>(null);
+  const [addressNumber, setAddressNumber] = useState("");
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipError, setZipError] = useState("");
+  async function findZip(masked: string) {
+    setZipError("");
+    if (onlyDigits(masked).length !== 8) return;
+    setZipLoading(true);
+    try {
+      const found = await lookupCep(masked);
+      if (!found) return setZipError("CEP não encontrado.");
+      setCep(found);
+      set("address", formatCepAddress(found, addressNumber));
+    } catch {
+      // offline or blocked: the address is typed by hand
+    } finally {
+      setZipLoading(false);
+    }
+  }
   const setDay = (day: number, patch: Partial<DayForm>) => setForm((f) => ({ ...f, days: { ...f.days, [day]: { ...f.days[day], ...patch } } }));
   const setZone = (key: string, patch: Partial<ZoneForm>) =>
     setForm((f) => ({ ...f, zones: f.zones.map((z) => (z.key === key ? { ...z, ...patch } : z)) }));
@@ -174,6 +200,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
     if (!Number.isFinite(fee) || fee < 0 || !Number.isFinite(min) || min < 0) return toast.error("Revise os valores.");
     if (zones.some((z) => !z.name || !Number.isFinite(z.fee) || z.fee < 0)) return toast.error("Revise o nome e a taxa de cada bairro.");
     if (form.logo_url?.trim() && !cleanImageUrl(form.logo_url)) return toast.error("O link da logo deve começar com https://");
+    if (form.header_image_url?.trim() && !cleanImageUrl(form.header_image_url)) return toast.error("O link da imagem de fundo deve começar com https://");
     if (form.auto_hours && hours.length === 0) return toast.error("Marque ao menos um dia de funcionamento.");
     if (!Number.isInteger(minHours) || minHours < 0 || !Number.isInteger(maxDays) || maxDays < 1) return toast.error("Revise as regras de encomenda.");
     if (!form.delivery_enabled && !form.pickup_enabled) return toast.error("Ative a entrega ou a retirada.");
@@ -205,6 +232,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
         schedule_min_hours: minHours,
         schedule_max_days: maxDays,
         address: form.address.trim() || null,
+        address_zip: onlyDigits(form.address_zip).length === 8 ? onlyDigits(form.address_zip) : null,
         delivery_enabled: form.delivery_enabled,
         pickup_enabled: form.pickup_enabled,
         ...eta,
@@ -214,6 +242,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
         festive_mode: form.festive_mode,
         festive_message: form.festive_message.trim() || null,
         festive_effects: form.festive_effects,
+        header_image_url: cleanImageUrl(form.header_image_url),
       });
       setForm((f) => ({ ...f, zones: saved.current.zones.map((z) => ({ key: z.id, name: z.name, fee: money(z.fee) })) }));
       setBaseline(snapshot(form));
@@ -284,7 +313,42 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
             <Field label="WhatsApp da loja" optional hint="Exibido para o cliente falar com vocês.">
               {(p) => <Input {...p} type="tel" value={form.phone} onChange={(e) => set("phone", maskPhone(e.target.value))} placeholder="(11) 99999-9999" />}
             </Field>
-            <Field label="Endereço da loja" optional hint="Aparece no cardápio e para quem vai retirar." className="sm:col-span-2">
+            <Field label="CEP da loja" optional error={zipError || undefined} hint={zipLoading ? "Buscando endereço…" : "Preenche o endereço sozinho."}>
+              {(p) => (
+                <Input
+                  {...p}
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  value={form.address_zip}
+                  onChange={(e) => {
+                    const masked = maskZip(e.target.value);
+                    set("address_zip", masked);
+                    findZip(masked);
+                  }}
+                  placeholder="00000-000"
+                />
+              )}
+            </Field>
+            <Field label="Número" optional>
+              {(p) => (
+                <Input
+                  {...p}
+                  value={addressNumber}
+                  onChange={(e) => {
+                    setAddressNumber(e.target.value);
+                    if (cep) set("address", formatCepAddress(cep, e.target.value));
+                  }}
+                  placeholder="123"
+                  maxLength={20}
+                />
+              )}
+            </Field>
+            <Field
+              label="Endereço da loja"
+              optional
+              hint="Preenchido pelo CEP; ajuste se precisar. Aparece no cardápio e para quem vai retirar."
+              className="sm:col-span-2"
+            >
               {(p) => <Input {...p} value={form.address} onChange={(e) => set("address", e.target.value)} placeholder="Rua das Flores, 123 - Centro, São Paulo" maxLength={200} />}
             </Field>
             <Field label="Frase de destaque" optional className="sm:col-span-2">
@@ -297,7 +361,13 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
         </Card>
 
         <AppearanceCard
-          value={{ theme_palette: form.theme_palette, festive_mode: form.festive_mode, festive_message: form.festive_message, festive_effects: form.festive_effects }}
+          value={{
+            theme_palette: form.theme_palette,
+            festive_mode: form.festive_mode,
+            festive_message: form.festive_message,
+            festive_effects: form.festive_effects,
+            header_image_url: form.header_image_url,
+          }}
           saved={saved}
           onChange={(patch) => setForm((f) => ({ ...f, ...patch }))}
         />
@@ -439,7 +509,7 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
               <Field label="Antecedência mínima (horas)" hint="Ex.: 24 para encomendar até o dia anterior.">
                 {(p) => <Input {...p} inputMode="numeric" value={form.schedule_min_hours} onChange={(e) => set("schedule_min_hours", e.target.value.replace(/\D/g, ""))} />}
               </Field>
-              <Field label="Agendar até (dias à frente)">
+              <Field label="Clientes podem reservar até (dias antes)" hint={agendaEnd(form.schedule_max_days)}>
                 {(p) => <Input {...p} inputMode="numeric" value={form.schedule_max_days} onChange={(e) => set("schedule_max_days", e.target.value.replace(/\D/g, ""))} />}
               </Field>
               <Field label="Pedidos por horário" optional hint="Vazio = sem limite. Cada horário dura 30 minutos; cheio, aparece como lotado.">
@@ -518,7 +588,15 @@ function SettingsForm({ initial }: { initial: StoreSettings }) {
   );
 }
 
-type AppearanceForm = Omit<ThemeSettings, "festive_message"> & { festive_message: string };
+/** Last day customers can book, for the hint under "dias antes". */
+function agendaEnd(value: string) {
+  const days = Number(value);
+  if (!value || !Number.isInteger(days) || days < 1 || days > 180) return "De 1 a 180 dias.";
+  const end = new Date(Date.parse(`${spNow(new Date()).date}T12:00:00Z`) + days * 86_400_000);
+  return `Hoje, a agenda vai até ${end.toISOString().slice(0, 10).split("-").reverse().join("/")}.`;
+}
+
+type AppearanceForm = Omit<ThemeSettings, "festive_message"> & { festive_message: string; header_image_url: string | null };
 
 const FESTIVE_OPTIONS: { id: FestiveMode; label: string; swatch?: { primary: string; accent: string } }[] = [
   { id: "off", label: "Desligado" },
@@ -559,6 +637,30 @@ function AppearanceCard({
   return (
     <Card className="space-y-5 p-5">
       <SectionTitle title="Aparência" description="Cores do cardápio e do painel. Um tema festivo substitui a cor enquanto estiver ativo." />
+
+      <div className="space-y-3">
+        {cleanImageUrl(value.header_image_url) && (
+          <div className="relative">
+            {/* eslint-disable-next-line @next/next/no-img-element -- uploaded photo or external link set in the panel */}
+            <img src={cleanImageUrl(value.header_image_url)!} alt="" className="aspect-[16/5] w-full rounded-md border border-border object-cover" />
+            <button
+              type="button"
+              onClick={() => onChange({ header_image_url: null })}
+              className="absolute top-2 right-2 grid size-8 place-items-center rounded-full border border-border bg-surface shadow-sm"
+              aria-label="Remover imagem de fundo"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        )}
+        <ImageUpload
+          label="Imagem de fundo do cabeçalho"
+          hint="Foto larga e sem texto fica melhor. O texto do cardápio fica por cima, com um véu para continuar legível."
+          value={value.header_image_url}
+          onChange={(url) => onChange({ header_image_url: url })}
+          maxSide={1600}
+        />
+      </div>
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-semibold">Cor</legend>

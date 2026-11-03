@@ -5,6 +5,7 @@ import { iso, query } from "@/lib/db";
 import { withoutCost } from "@/lib/orders";
 import { REFERRAL_SOURCES } from "@/lib/customer";
 import { currentCustomerId } from "@/lib/customer-session";
+import { tooManyRequests } from "@/lib/rate-limit";
 import { isAuthConfigured, neonAuth } from "@/lib/neon-auth";
 import type { OrderAddress, OrderItem, OrderStatus } from "@/types";
 
@@ -73,6 +74,7 @@ export async function signUpCustomer(input: z.input<typeof signUpSchema>): Promi
   try {
     if (!isAuthConfigured) return { ok: false, error: "Cadastro indisponível no momento." };
     const data = signUpSchema.parse(input);
+    if (await tooManyRequests("signup", 5, 60)) return { ok: false, error: "Muitos cadastros em pouco tempo. Tente de novo mais tarde." };
     const [taken] = await query("select 1 from customer_accounts where phone = $1", [data.phone]);
     if (taken) return { ok: false, error: "Este WhatsApp já tem cadastro. Entre com seu e-mail e senha." };
 

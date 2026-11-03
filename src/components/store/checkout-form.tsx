@@ -11,6 +11,7 @@ import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Card, ChoiceGroup, EmptyState, Skeleton } from "@/components/ui/misc";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cartTotals, loadCustomer, rememberOrder, saveCustomer, useCart } from "@/lib/cart-store";
+import { lookupCep } from "@/lib/cep";
 import { cn, formatBRL, mapsLink, maskPhone, maskZip, onlyDigits, parseMoney } from "@/lib/format";
 import { etaLabel, formatScheduled, scheduleDays, spInstant } from "@/lib/hours";
 import { useReservation } from "@/lib/reservation-store";
@@ -194,20 +195,19 @@ function CheckoutBody({ settings }: { settings: StoreSettings | null }) {
     if (zip.length !== 8) return;
     setZipLoading(true);
     try {
-      const res = await fetch(`https://viacep.com.br/ws/${zip}/json/`);
-      const data = await res.json();
-      if (data.erro) {
+      const data = await lookupCep(zip);
+      if (!data) {
         setErrors((e) => ({ ...e, zip: "CEP não encontrado." }));
         return;
       }
       // with zones, the neighborhood from the CEP is matched to the list by name
-      const zone = data.bairro ? findZone(zones, data.bairro) : undefined;
+      const zone = data.neighborhood ? findZone(zones, data.neighborhood) : undefined;
       setForm((f) => ({
         ...f,
-        street: data.logradouro || f.street,
-        neighborhood: zone ? zone.name : data.bairro || f.neighborhood,
-        otherZone: zones.length > 0 && !zone && Boolean(data.bairro),
-        city: data.localidade || f.city,
+        street: data.street || f.street,
+        neighborhood: zone ? zone.name : data.neighborhood || f.neighborhood,
+        otherZone: zones.length > 0 && !zone && Boolean(data.neighborhood),
+        city: data.city || f.city,
       }));
       document.querySelector<HTMLElement>(`[data-field="number"] input`)?.focus();
     } catch {

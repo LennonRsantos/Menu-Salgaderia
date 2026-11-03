@@ -76,11 +76,26 @@ export function StoreHeader({ settings, theme = DEFAULT_THEME }: { settings: Sto
 
   return (
     <header className="relative overflow-hidden border-b border-border bg-surface">
+      {settings?.header_image_url ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element -- uploaded photo or external link set in the panel */}
+          <img
+            src={settings.header_image_url}
+            alt=""
+            fetchPriority="high"
+            className="pointer-events-none absolute inset-0 size-full object-cover"
+            aria-hidden
+          />
+          {/* veil over the photo keeps the text readable in both themes */}
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-b from-surface/55 via-surface/80 to-surface" aria-hidden />
+        </>
+      ) : (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-primary-soft to-transparent"
+          aria-hidden
+        />
+      )}
       <FestiveBanner theme={theme} />
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-accent-soft to-transparent"
-        aria-hidden
-      />
       <FestiveEffects theme={theme} />
       <div className="relative mx-auto flex max-w-5xl flex-col gap-4 px-4 pt-4 pb-5 sm:px-6">
         <div className="flex items-center justify-end gap-1">
@@ -223,7 +238,8 @@ function InfoTile({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-start gap-2.5 rounded-md bg-surface-2 px-3 py-2", className)}>
+    // translucent so a header photo still shows through
+    <div className={cn("flex items-start gap-2.5 rounded-md bg-surface-2/80 px-3 py-2 backdrop-blur-sm", className)}>
       <Icon className={cn("mt-0.5 size-4 shrink-0", muted ? "text-muted-foreground" : "text-primary-soft-foreground")} />
       <div className="min-w-0 leading-snug">
         <p className="text-xs font-medium text-muted-foreground">{title}</p>

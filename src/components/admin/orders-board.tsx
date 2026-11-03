@@ -22,6 +22,7 @@ import { playChime } from "@/lib/chime";
 import { cn, formatBRL, normalizeSearch } from "@/lib/format";
 import { canTransition, COLUMN_LABEL, ORDER_STATUSES, STATUS_DOT, statusLabel } from "@/lib/order-status";
 import { updateOrderStatus } from "@/actions/orders";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { useNow } from "@/lib/use-now";
 import type { Fulfillment, Order, OrderStatus } from "@/types";
 import { OrderCard } from "./order-card";
@@ -30,6 +31,8 @@ import { PageHeader } from "./panel-shell";
 
 const SOUND_KEY = "salgaderia:sound";
 const POLL_MS = 5_000;
+// computers and tablets (the panel's md breakpoint); the height leaves out phones lying sideways
+const DRAG_QUERY = "(min-width: 768px) and (min-height: 600px)";
 
 export function OrdersBoard() {
   const now = useNow();
@@ -179,6 +182,8 @@ export function OrdersBoard() {
     return map;
   }, [visible]);
 
+  // dragging only on computers and tablets; on phones a long press while scrolling would start it by accident
+  const canDrag = useMediaQuery(DRAG_QUERY);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 6 } }),
@@ -199,7 +204,11 @@ export function OrdersBoard() {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Pedidos"
-        description="Arraste os cartões entre as colunas ou use os botões. Atualiza a cada 5 segundos."
+        description={
+          canDrag
+            ? "Arraste os cartões entre as colunas ou use os botões. Atualiza a cada 5 segundos."
+            : "Use os botões dos cartões para avançar os pedidos. Atualiza a cada 5 segundos."
+        }
         actions={
           <>
             <span
@@ -272,7 +281,7 @@ export function OrdersBoard() {
                 activeFrom={dragging?.status ?? null}
               >
                 {byStatus[status].map((o) => (
-                  <DraggableCard key={o.id} id={o.id}>
+                  <DraggableCard key={o.id} id={o.id} disabled={!canDrag}>
                     <OrderCard
                       order={o}
                       now={now}
@@ -346,9 +355,9 @@ function Column({
   );
 }
 
-function DraggableCard({ id, children }: { id: string; children: React.ReactNode }) {
+function DraggableCard({ id, disabled, children }: { id: string; disabled: boolean; children: React.ReactNode }) {
   // Pointer/touch drag only; keyboard users move orders with the card buttons.
-  const { setNodeRef, listeners, isDragging } = useDraggable({ id });
+  const { setNodeRef, listeners, isDragging } = useDraggable({ id, disabled });
   return (
     <div ref={setNodeRef} {...listeners} className={cn("touch-manipulation rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none", isDragging && "opacity-30")}>
       {children}

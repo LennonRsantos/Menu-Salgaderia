@@ -52,7 +52,7 @@ export function productFromRow(r: Record<string, unknown>): Product {
 export const SETTINGS_COLUMNS =
   "id, name, tagline, phone, logo_url, delivery_fee, min_order, is_open, opening_hours, auto_hours, hours, other_zones, schedule_enabled, schedule_min_hours, schedule_max_days, " +
   "address, delivery_enabled, pickup_enabled, delivery_min, delivery_max, pickup_min, pickup_max, slot_capacity, " +
-  "theme_palette, festive_mode, festive_message, festive_effects";
+  "theme_palette, festive_mode, festive_message, festive_effects, header_image_url, address_zip";
 export const ZONES_SQL = "select id, name, fee, position from delivery_zones order by position, name";
 export const SPECIAL_DATES_SQL = "select to_char(date, 'YYYY-MM-DD') as date, title from special_dates order by date";
 
@@ -66,7 +66,7 @@ export function settingsFromRow(
     ...(row as unknown as StoreSettings),
     hours: cleanHours(row.hours),
     schedule_min_hours: Number(row.schedule_min_hours ?? 24),
-    schedule_max_days: Number(row.schedule_max_days ?? 30),
+    schedule_max_days: Number(row.schedule_max_days ?? 60),
     zones: zones.map((z) => ({ ...z, fee: Number(z.fee) })),
     special_dates: specialDates,
     theme_palette: toPalette(row.theme_palette),

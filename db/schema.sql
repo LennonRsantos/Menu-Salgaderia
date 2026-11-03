@@ -308,3 +308,20 @@ alter table store_settings add column if not exists festive_mode text not null d
 -- Banner text on the menu; null = the theme's default message.
 alter table store_settings add column if not exists festive_message text;
 alter table store_settings add column if not exists festive_effects boolean not null default true;
+
+-- Background photo of the menu header, uploaded in the panel (like logo_url).
+alter table store_settings add column if not exists header_image_url text;
+
+-- Customers may book up to 60 days ahead by default (still 1..180 in the panel).
+alter table store_settings alter column schedule_max_days set default 60;
+
+-- CEP of the store address (digits), so the panel can look it up again.
+alter table store_settings add column if not exists address_zip text;
+
+-- Per-IP limit for public actions (src/lib/rate-limit.ts). key = scope + hash
+-- of the IP, never the IP itself; rows older than a day are cleaned up.
+create table if not exists rate_hits (
+  key text not null,
+  at  timestamptz not null default now()
+);
+create index if not exists rate_hits_key_idx on rate_hits (key, at);

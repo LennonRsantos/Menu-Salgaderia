@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { Card } from "@/components/ui/misc";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { StoreMark } from "./panel-shell";
 
-export function LoginForm({ configured }: { configured: boolean }) {
+export function LoginForm({ configured, logoUrl }: { configured: boolean; logoUrl: string | null }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,12 +40,11 @@ export function LoginForm({ configured }: { configured: boolean }) {
 
   return (
     <div className="relative grid min-h-dvh place-items-center px-4 py-10">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-linear-to-b from-accent-soft to-transparent" aria-hidden />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-linear-to-b from-primary-soft to-transparent" aria-hidden />
       <ThemeToggle className="absolute top-4 right-4" />
       <main id="conteudo" tabIndex={-1} className="relative w-full max-w-sm outline-none">
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element -- small static brand image */}
-          <img src="/brand/menu-icon.png" alt="" width={56} height={56} className="size-14 rounded-2xl border border-border shadow-md" />
+          <StoreMark logoUrl={logoUrl} size={56} className="rounded-2xl shadow-md" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Painel da loja</h1>
             <p className="text-sm text-muted-foreground">Acesso restrito à equipe</p>

@@ -18,12 +18,24 @@ type Extra = Omit<Extract<DashboardResult, { ok: true }>, "ok" | "metrics" | "se
 
 const RANGES = [7, 30, 90] as const;
 
-// Chart colors come from the validated tokens (--chart-1); SVG attributes need concrete values.
-// The mark follows the palette chosen in the panel (read from the page), these hexes are the fallback.
+// Chart colors come from the validated tokens; SVG attributes need concrete values.
+// They follow the palette chosen in the panel (read from the page); these hexes are the fallback.
 const CHART = {
-  light: { mark: "#7d3a8b", grid: "#ddd5c0", text: "#625a4c", surface: "#faf7ef" },
+  light: { mark: "#7d3a8b", grid: "#e8dce6", text: "#63555d", surface: "#ffffff" },
   dark: { mark: "#b072bc", grid: "#2e2a25", text: "#aaa194", surface: "#1b1916" },
 };
+const CHART_TOKENS = { mark: "--chart-1", grid: "--border", text: "--muted-foreground", surface: "--surface" } as const;
+
+/** A color token as "rgb(r g b)": tokens may be color-mix(), which SVG attributes don't take everywhere. */
+function resolveToken(name: string) {
+  const ctx = document.createElement("canvas").getContext("2d");
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!ctx || !value) return "";
+  ctx.fillStyle = value;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r} ${g} ${b})`;
+}
 
 export function Dashboard() {
   const profile = useProfile();
@@ -43,8 +55,9 @@ function DashboardContent() {
   const mounted = useMounted();
   const base = CHART[resolvedTheme === "dark" ? "dark" : "light"];
   // read on each render: a light/dark switch re-renders through resolvedTheme
-  const mark = mounted && resolvedTheme ? getComputedStyle(document.documentElement).getPropertyValue("--chart-1").trim() : "";
-  const colors = { ...base, mark: mark || base.mark };
+  const colors = Object.fromEntries(
+    Object.entries(CHART_TOKENS).map(([k, token]) => [k, (mounted && resolvedTheme && resolveToken(token)) || base[k as keyof typeof base]]),
+  ) as typeof base;
   const [range, setRange] = useState<(typeof RANGES)[number]>(30);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [series, setSeries] = useState<DayPoint[] | null>(null);

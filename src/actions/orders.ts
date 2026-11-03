@@ -9,6 +9,7 @@ import { canTransition } from "@/lib/order-status";
 import { formatQty, stockNeeds } from "@/lib/stock";
 import { clientRun, orderItemCosts } from "@/lib/costs-db";
 import { currentCustomerId } from "@/lib/customer-session";
+import { tooManyRequests } from "@/lib/rate-limit";
 import { applyStockDeltas } from "@/lib/stock-db";
 import type { DeliveryZone, OrderItem, OrderStatus, Product, StockLink } from "@/types";
 
@@ -22,6 +23,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export async function placeOrder(input: PlaceOrderInput): Promise<PlaceOrderResult> {
   try {
+    // orders are free to place and take stock at once: cap how many one network sends
+    if (await tooManyRequests("order", 6, 10)) {
+      return { ok: false, error: "Muitos pedidos em pouco tempo. Aguarde alguns minutos ou fale com a loja pelo WhatsApp." };
+    }
     const productIds = [...new Set((input?.items ?? []).map((i) => String(i?.product_id ?? "")).filter((id) => UUID.test(id)))].slice(0, 50);
     // the session decides the account; the browser never sends a user id
     const customerId = await currentCustomerId();

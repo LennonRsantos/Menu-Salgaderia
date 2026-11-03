@@ -203,7 +203,9 @@ export async function resetCustomerPassword(phone: string): Promise<Result<strin
 }
 
 const csvCell = (v: unknown) => {
-  const s = v === null || v === undefined ? "" : String(v);
+  let s = v === null || v === undefined ? "" : String(v);
+  // names come from the public order form: never let Excel read one as a formula
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 

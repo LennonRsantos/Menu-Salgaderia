@@ -30,6 +30,7 @@ import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Sheet } from "@/components/ui/sheet";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/format";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { useMounted } from "@/lib/use-mounted";
 import type { Profile } from "@/types";
 
@@ -65,7 +66,22 @@ const NAV: NavItem[] = [
   { href: "/admin/configuracoes", label: "Loja", icon: Settings, adminOnly: true, group: "more" },
 ];
 
-export function PanelShell({ children }: { children: React.ReactNode }) {
+/** The store logo set in the panel; the default brand icon until one is set. */
+export function StoreMark({ logoUrl, size, alt = "", className }: { logoUrl: string | null; size: number; alt?: string; className?: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- uploaded photo or external link set in the panel
+    <img
+      src={logoUrl ?? "/brand/menu-icon.png"}
+      alt={alt}
+      width={size}
+      height={size}
+      className={cn("shrink-0 border border-border bg-surface object-cover", className)}
+      style={{ width: size, height: size }}
+    />
+  );
+}
+
+export function PanelShell({ logoUrl, children }: { logoUrl: string | null; children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -127,8 +143,7 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar: every page, labelled */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-border bg-surface lg:flex">
         <div className="flex h-16 items-center gap-2.5 px-5">
-          {/* eslint-disable-next-line @next/next/no-img-element -- small static brand image */}
-          <img src="/brand/menu-icon.png" alt="" width={36} height={36} className="size-9 rounded-lg border border-border" />
+          <StoreMark logoUrl={logoUrl} size={36} className="rounded-lg" />
           <div className="leading-tight">
             <p className="font-bold" translate="no">
               Menu
@@ -168,8 +183,7 @@ export function PanelShell({ children }: { children: React.ReactNode }) {
 
       {/* Tablet rail: the daily pages + "Mais" */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-20 flex-col items-center border-r border-border bg-surface py-4 md:flex lg:hidden">
-        {/* eslint-disable-next-line @next/next/no-img-element -- small static brand image */}
-        <img src="/brand/menu-icon.png" alt="Menu" width={40} height={40} className="mb-6 size-10 rounded-xl border border-border" />
+        <StoreMark logoUrl={logoUrl} size={40} alt="Menu" className="mb-6 rounded-xl" />
         {profile && (
           <nav className="flex w-full flex-1 flex-col items-center gap-1 px-2" aria-label="Painel">
             {main.map((n) => (
@@ -340,12 +354,16 @@ const THEMES = [
 ] as const;
 
 function ThemeChoice() {
-  const { theme, setTheme } = useTheme();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const mounted = useMounted();
-  const current = mounted ? (theme ?? "system") : "system";
+  const desktop = useIsDesktop();
+  const saved = mounted ? (theme ?? "system") : "system";
+  // "system" only on computers; elsewhere a saved "system" marks the theme it resolves to
+  const options = desktop ? THEMES : THEMES.filter((t) => t.value !== "system");
+  const current = mounted && !desktop && saved === "system" ? (resolvedTheme === "dark" ? "dark" : "light") : saved;
   return (
     <div className="flex rounded-full border border-border-strong p-0.5" role="radiogroup" aria-label="Tema">
-      {THEMES.map((t) => (
+      {options.map((t) => (
         <button
           key={t.value}
           type="button"

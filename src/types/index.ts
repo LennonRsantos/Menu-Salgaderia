@@ -47,6 +47,10 @@ export interface StoreSettings {
   /** Menu banner while a festive theme is on; null = the theme's default. */
   festive_message: string | null;
   festive_effects: boolean;
+  /** Background photo of the menu header; null = the plain header. */
+  header_image_url: string | null;
+  /** CEP of `address` (8 digits), filled by the lookup in the panel. */
+  address_zip: string | null;
 }
 
 export interface DeliveryZone {

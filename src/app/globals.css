@@ -5,8 +5,9 @@
 /* ---------------------------------------------------------------------------
    Design tokens
    Brand from the "Menu" logo: purple (primary), mustard (accent, details
-   only: too low contrast on cream for text), cream background, black ink.
-   Neutrals are warm in both themes.
+   only: too low contrast on light surfaces for text), black ink.
+   Light neutrals are mixed from the brand ramp, so they follow whatever
+   palette or festive theme is on; dark neutrals are warm and fixed.
    Components only use the semantic tokens below, never raw palette colors.
    --------------------------------------------------------------------------- */
 
@@ -85,14 +86,15 @@
 }
 
 :root {
-  --background: #ece6d6;
-  --foreground: #141210;
-  --surface: #faf7ef;
-  --surface-2: #f3eee1;
-  --surface-3: #e6dfcc;
-  --border: #ddd5c0;
-  --border-strong: #cbc1a8;
-  --muted-foreground: #625a4c;
+  /* white cards on a page one step down, both tinted by the brand */
+  --background: color-mix(in oklab, var(--color-brand-100) 30%, #faf8f6);
+  --foreground: color-mix(in oklab, var(--color-brand-950) 25%, #141210);
+  --surface: #ffffff;
+  --surface-2: color-mix(in oklab, var(--color-brand-50) 75%, #ffffff);
+  --surface-3: color-mix(in oklab, var(--color-brand-100) 80%, #ffffff);
+  --border: color-mix(in oklab, var(--color-brand-200) 35%, #ebe8e5);
+  --border-strong: color-mix(in oklab, var(--color-brand-300) 40%, #d8d3ce);
+  --muted-foreground: color-mix(in oklab, var(--color-brand-900) 25%, #6e6862);
 
   --primary: var(--color-brand-700);
   --primary-hover: var(--color-brand-800);
@@ -104,7 +106,8 @@
 
   --accent: var(--color-gold-500);
   --accent-foreground: #141210;
-  --accent-soft: color-mix(in srgb, var(--color-gold-500) 22%, transparent);
+  /* buttery, not olive: mustard lightened toward a warm white */
+  --accent-soft: color-mix(in oklab, var(--color-gold-400) 24%, #fffaf2);
 
   --danger: #dc2626;
   --danger-soft: #fef2f2;
@@ -117,9 +120,11 @@
   --info-soft: #eff6ff;
   --info-soft-foreground: #1d4ed8;
 
-  --shadow-sm: 0 1px 2px rgb(20 18 16 / 0.05), 0 1px 3px rgb(20 18 16 / 0.04);
-  --shadow-md: 0 8px 24px -6px rgb(20 18 16 / 0.12), 0 2px 6px rgb(20 18 16 / 0.04);
-  --overlay: rgb(20 18 16 / 0.45);
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--color-brand-950) 6%, transparent),
+    0 1px 3px color-mix(in srgb, var(--color-brand-950) 5%, transparent);
+  --shadow-md: 0 8px 24px -6px color-mix(in srgb, var(--color-brand-950) 14%, transparent),
+    0 2px 6px color-mix(in srgb, var(--color-brand-950) 5%, transparent);
+  --overlay: color-mix(in srgb, var(--color-brand-950) 45%, transparent);
 
   /* single-series chart mark (validated with the dataviz palette checks) */
   --chart-1: var(--color-brand-600);
