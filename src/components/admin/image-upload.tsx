@@ -15,7 +15,7 @@ const canvasBlob = (canvas: HTMLCanvasElement, type: string, quality: number) =>
  * Shrinks a photo in the browser so the longest side is at most `maxSide`,
  * as WebP (JPEG where WebP encoding is missing), under IMAGE_MAX_BYTES.
  */
-async function shrink(file: File, maxSide: number): Promise<Blob> {
+export async function shrink(file: File, maxSide: number): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");

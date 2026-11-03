@@ -11,6 +11,7 @@ type StaffRow = {
   active: boolean;
   created_at: Date;
   nav_pins?: string[] | null;
+  avatar_url?: string | null;
 };
 
 export function profileFromRow(r: StaffRow): Profile {
@@ -22,6 +23,7 @@ export function profileFromRow(r: StaffRow): Profile {
     active: r.active,
     created_at: iso(r.created_at) ?? "",
     nav_pins: r.nav_pins ?? null,
+    avatar_url: r.avatar_url ?? null,
   };
 }
 

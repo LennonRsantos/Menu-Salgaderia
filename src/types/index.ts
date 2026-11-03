@@ -69,6 +69,8 @@ export interface Profile {
   created_at: string;
   /** Pages pinned to the phone bar and tablet rail (NAV_KEYS); null = the defaults. */
   nav_pins: string[] | null;
+  /** Profile photo (/api/images/<id>); null = initials. */
+  avatar_url: string | null;
 }
 
 export interface Category {

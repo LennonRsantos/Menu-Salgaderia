@@ -408,7 +408,7 @@ function MoreSheet({
     <Sheet open={open} onClose={onClose} title="Menu" size="sm">
       <div className="space-y-4 px-5 pt-1 pb-5">
         <div className="flex items-center gap-3 rounded-lg bg-surface-2 px-3 py-3">
-          <Initials profile={profile} />
+          <StaffAvatar profile={profile} />
           <div className="min-w-0 leading-tight">
             <p className="truncate font-semibold">{profile.full_name || profile.email}</p>
             <p className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -498,13 +498,35 @@ function ThemeChoice() {
   );
 }
 
-function Initials({ profile }: { profile: Profile }) {
+/** The person's photo, or their initials when there is none. */
+export function StaffAvatar({ profile, size = 36 }: { profile: Pick<Profile, "full_name" | "email" | "avatar_url">; size?: number }) {
+  if (profile.avatar_url) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- photo sent from "Minha conta"
+      <img
+        src={profile.avatar_url}
+        alt=""
+        width={size}
+        height={size}
+        className="shrink-0 rounded-full border border-border bg-surface-3 object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   const initials = (profile.full_name || profile.email)
     .split(/\s+/)
     .slice(0, 2)
     .map((w) => w.charAt(0).toUpperCase())
     .join("");
-  return <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-3 text-sm font-bold">{initials}</span>;
+  return (
+    <span
+      className="grid shrink-0 place-items-center rounded-full bg-surface-3 font-bold"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.38) }}
+      aria-hidden
+    >
+      {initials}
+    </span>
+  );
 }
 
 function UserCard({ profile, onSignOut }: { profile: Profile; onSignOut: () => void }) {
@@ -515,7 +537,7 @@ function UserCard({ profile, onSignOut }: { profile: Profile; onSignOut: () => v
         className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-2"
         aria-label={`Minha conta: ${profile.full_name || profile.email}`}
       >
-        <Initials profile={profile} />
+        <StaffAvatar profile={profile} />
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-sm font-semibold">{profile.full_name || profile.email}</p>
           <p className="flex items-center gap-1 text-xs text-muted-foreground">

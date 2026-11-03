@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { formatDateTime } from "@/lib/format";
 import { fieldErrors, staffSchema } from "@/lib/validators";
 import type { Profile, UserRole } from "@/types";
-import { AdminOnly, PageHeader, useProfile } from "./panel-shell";
+import { AdminOnly, PageHeader, StaffAvatar, useProfile } from "./panel-shell";
 
 export function StaffPage() {
   return (
@@ -80,9 +80,7 @@ function StaffManager() {
           <Card className="divide-y divide-border overflow-hidden">
             {staff.map((p) => (
               <div key={p.id} className="flex items-start gap-3 px-4 py-3.5 sm:items-center">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface-3 text-sm font-bold">
-                  {(p.full_name || p.email).charAt(0).toUpperCase()}
-                </span>
+                <StaffAvatar profile={p} size={40} />
                 {/* phones: name, then badges, then e-mail; from sm everything sits in one row */}
                 <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
                   <div className="min-w-0 sm:flex-1">

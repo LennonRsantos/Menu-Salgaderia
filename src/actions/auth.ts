@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authErrorMessage, findStaff, requireStaff, setLoginEmail } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { neonAuth } from "@/lib/neon-auth";
+import { IMAGE_PATH } from "@/lib/images";
 import { pinsError } from "@/lib/nav";
 import { tooManyRequests } from "@/lib/rate-limit";
 import type { Profile } from "@/types";
@@ -115,5 +116,18 @@ export async function changeMyEmail(input: { email: string; password: string }):
     return { ok: true, profile: { ...me, email } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Não foi possível trocar o e-mail." };
+  }
+}
+
+/** The signed-in person's profile photo: a photo sent with uploadImage, or null for the initials. */
+export async function saveMyAvatar(url: string | null): Promise<{ ok: true; profile: Profile } | { ok: false; error: string }> {
+  try {
+    const me = await requireStaff();
+    const avatar = url === null ? null : String(url);
+    if (avatar !== null && !IMAGE_PATH.test(avatar)) return { ok: false, error: "Envie uma foto pelo botão." };
+    await query("update staff set avatar_url = $2 where user_id = $1", [me.id, avatar]);
+    return { ok: true, profile: { ...me, avatar_url: avatar } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Não foi possível salvar a foto." };
   }
 }

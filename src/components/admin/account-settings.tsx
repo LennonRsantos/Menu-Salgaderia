@@ -1,14 +1,16 @@
 "use client";
 
-import { Eye, EyeOff, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { Camera, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { changeMyEmail, changeMyPassword } from "@/actions/auth";
+import { changeMyEmail, changeMyPassword, saveMyAvatar } from "@/actions/auth";
+import { uploadImage } from "@/actions/images";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
 import { Card } from "@/components/ui/misc";
 import { ConfirmDialog } from "@/components/ui/sheet";
-import { PageHeader, useProfile, useSetProfile } from "./panel-shell";
+import { shrink } from "./image-upload";
+import { PageHeader, StaffAvatar, useProfile, useSetProfile } from "./panel-shell";
 
 const OFFLINE = { ok: false as const, error: "Sem conexão. Tente novamente." };
 
@@ -19,22 +21,81 @@ export function AccountSettings() {
     <div className="pb-8">
       <PageHeader title="Minha conta" description="Seu e-mail e sua senha para entrar no painel." />
       <div className="max-w-2xl space-y-4 px-4 sm:px-6">
-        <Card className="flex items-center gap-4 p-5">
-          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-primary-soft text-lg font-bold text-primary-soft-foreground" aria-hidden>
-            {(profile.full_name || profile.email).charAt(0).toUpperCase()}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate font-bold">{profile.full_name}</p>
-            <p className="truncate text-sm text-muted-foreground">{profile.email}</p>
-            <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
-              {profile.role === "admin" && <ShieldCheck className="size-3.5" />}
-              {profile.role === "admin" ? "Gerente" : "Funcionário"}
-            </p>
+        <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-4">
+            <StaffAvatar profile={profile} size={80} />
+            <div className="min-w-0">
+              <p className="truncate font-bold">{profile.full_name}</p>
+              <p className="truncate text-sm text-muted-foreground">{profile.email}</p>
+              <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-muted-foreground">
+                {profile.role === "admin" && <ShieldCheck className="size-3.5" />}
+                {profile.role === "admin" ? "Gerente" : "Funcionário"}
+              </p>
+            </div>
           </div>
+          <AvatarButtons />
         </Card>
         <EmailCard />
         <PasswordCard />
       </div>
+    </div>
+  );
+}
+
+/** Sends a new photo and saves it at once; "Remover" goes back to the initials. */
+function AvatarButtons() {
+  const profile = useProfile();
+  const setProfile = useSetProfile();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
+
+  async function save(url: string | null) {
+    const result = await saveMyAvatar(url).catch(() => OFFLINE);
+    if (!result.ok) return toast.error(result.error);
+    setProfile(result.profile);
+    toast.success(url ? "Foto atualizada." : "Foto removida.");
+  }
+
+  async function pick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy("upload");
+    try {
+      let blob: Blob;
+      try {
+        blob = await shrink(file, 320);
+      } catch {
+        return toast.error("Não foi possível ler esta imagem. Use uma foto JPG, PNG ou WebP.");
+      }
+      const form = new FormData();
+      form.append("file", blob);
+      const uploaded = await uploadImage(form).catch(() => OFFLINE);
+      if (!uploaded.ok) return toast.error(uploaded.error);
+      await save(uploaded.data.url);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove() {
+    setBusy("remove");
+    await save(null);
+    setBusy(null);
+  }
+
+  return (
+    <div className="flex gap-2">
+      <input ref={fileRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} aria-hidden onChange={pick} />
+      <Button variant="outline" size="sm" loading={busy === "upload"} disabled={busy !== null} onClick={() => fileRef.current?.click()}>
+        <Camera className="size-4" />
+        {profile.avatar_url ? "Trocar foto" : "Pôr foto"}
+      </Button>
+      {profile.avatar_url && (
+        <Button variant="ghost" size="sm" loading={busy === "remove"} disabled={busy !== null} onClick={remove}>
+          Remover
+        </Button>
+      )}
     </div>
   );
 }

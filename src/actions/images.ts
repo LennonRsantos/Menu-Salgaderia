@@ -7,7 +7,8 @@ import type { MenuActionResult } from "./menu";
 
 /**
  * Stores a photo sent from the panel and returns the path to save in
- * `products.image_url`, `store_settings.logo_url` or `store_settings.header_image_url`.
+ * `products.image_url`, `store_settings.logo_url`, `store_settings.header_image_url`
+ * or `staff.avatar_url`.
  */
 export async function uploadImage(form: FormData): Promise<MenuActionResult<{ url: string }>> {
   try {
@@ -38,6 +39,7 @@ async function removeOrphans() {
     `delete from images i
       where i.created_at < now() - interval '1 day'
         and not exists (select 1 from products p where p.image_url = '/api/images/' || i.id)
+        and not exists (select 1 from staff st where st.avatar_url = '/api/images/' || i.id)
         and not exists (
           select 1 from store_settings s
            where s.logo_url = '/api/images/' || i.id or s.header_image_url = '/api/images/' || i.id

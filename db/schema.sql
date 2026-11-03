@@ -330,6 +330,9 @@ create index if not exists rate_hits_key_idx on rate_hits (key, at);
 -- null = the default ones.
 alter table staff add column if not exists nav_pins text[];
 
+-- Profile photo each person sets in "Minha conta" (/api/images/<id>).
+alter table staff add column if not exists avatar_url text;
+
 -- Discount coupons (admin "Cupons" tab, src/lib/coupons.ts). A coupon is used
 -- at most once per customer (WhatsApp, and account when signed in) and at most
 -- max_uses times in total (null = no limit). Cancelling an order keeps the use.
