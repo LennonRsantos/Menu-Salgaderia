@@ -481,7 +481,7 @@ function ProfileTab({
             className="min-w-0 flex-1"
           />
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nome da loja">{(p) => <Input {...p} value={form.name} onChange={(e) => set("name", e.target.value)} />}</Field>
           <Field label="WhatsApp da loja" optional hint="Exibido para o cliente falar com vocês.">
             {(p) => <Input {...p} type="tel" value={form.phone} onChange={(e) => set("phone", maskPhone(e.target.value))} placeholder="(11) 99999-9999" />}
@@ -494,7 +494,7 @@ function ProfileTab({
 
       <Card className="space-y-4 p-5">
         <SectionTitle title="Endereço" description="Aparece no cardápio e para quem vai retirar o pedido." />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="CEP" optional error={zip.error || undefined} hint={zip.loading ? "Buscando endereço…" : "Preenche o endereço sozinho."}>
             {(p) => (
               <Input
@@ -775,7 +775,7 @@ function OrdersTab({ form, set, onGoProfile }: TabProps & { onGoProfile: () => v
           <Switch checked={form.schedule_enabled} onCheckedChange={(v) => set("schedule_enabled", v)} label="Aceitar agendamento" />
         </div>
         {form.schedule_enabled && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Antecedência mínima (horas)" hint="Ex.: 24 para encomendar até o dia anterior.">
               {(p) => <Input {...p} inputMode="numeric" value={form.schedule_min_hours} onChange={(e) => set("schedule_min_hours", e.target.value.replace(/\D/g, ""))} />}
             </Field>

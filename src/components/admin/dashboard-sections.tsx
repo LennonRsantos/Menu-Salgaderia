@@ -59,7 +59,7 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: string[]
             <thead className="sticky top-0 bg-surface-2">
               <tr>
                 {headers.map((h, i) => (
-                  <th key={h} className={cn("px-3 py-2 font-semibold", i > 0 && "text-right")}>
+                  <th key={h} className={cn("px-3 py-2 font-semibold", i > 0 && "text-right whitespace-nowrap")}>
                     {h}
                   </th>
                 ))}
@@ -69,7 +69,7 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: string[]
               {rows.map((r, ri) => (
                 <tr key={ri}>
                   {r.map((c, ci) => (
-                    <td key={ci} className={cn("px-3 py-1.5", ci > 0 && "text-right tabular-nums")}>
+                    <td key={ci} className={cn("px-3 py-1.5", ci > 0 && "text-right whitespace-nowrap tabular-nums")}>
                       {c}
                     </td>
                   ))}
@@ -151,17 +151,17 @@ export function CashCard() {
                 {cash.received.map((r) => (
                   <tr key={r.method}>
                     <td className="py-2 font-medium">{PAYMENT_LABEL[r.method]}</td>
-                    <td className="py-2 text-right text-muted-foreground tabular-nums">
+                    <td className="py-2 pl-2 text-right whitespace-nowrap text-muted-foreground tabular-nums">
                       {r.orders} {r.orders === 1 ? "pedido" : "pedidos"}
                     </td>
-                    <td className="py-2 text-right font-semibold tabular-nums">{formatBRL(r.total)}</td>
+                    <td className="py-2 pl-2 text-right font-semibold whitespace-nowrap tabular-nums">{formatBRL(r.total)}</td>
                   </tr>
                 ))}
                 <tr>
                   <td className="pt-3 font-bold" colSpan={2}>
                     Total recebido
                   </td>
-                  <td className="pt-3 text-right text-lg font-bold tabular-nums">{formatBRL(received)}</td>
+                  <td className="pt-3 text-right text-lg font-bold whitespace-nowrap tabular-nums">{formatBRL(received)}</td>
                 </tr>
               </tbody>
             </table>
@@ -223,9 +223,9 @@ export function ProfitCard({ profit, range }: { profit: Profit | null; range: nu
             <thead>
               <tr className="text-xs text-muted-foreground">
                 <th className="py-1 text-left font-medium">Produto</th>
-                <th className="py-1 text-right font-medium">Preço</th>
-                <th className="py-1 text-right font-medium">Custo</th>
-                <th className="py-1 text-right font-medium">Margem</th>
+                <th className="py-1 pl-2 text-right font-medium whitespace-nowrap">Preço</th>
+                <th className="py-1 pl-2 text-right font-medium whitespace-nowrap">Custo</th>
+                <th className="py-1 pl-2 text-right font-medium whitespace-nowrap">Margem</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -233,10 +233,10 @@ export function ProfitCard({ profit, range }: { profit: Profit | null; range: nu
                 const m = p.price > 0 ? Math.round(((p.price - p.cost) / p.price) * 100) : 0;
                 return (
                   <tr key={p.name}>
-                    <td className="py-1.5">{p.name}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatBRL(p.price)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{formatBRL(p.cost)}</td>
-                    <td className="py-1.5 text-right font-semibold tabular-nums">
+                    <td className="py-1.5 break-words">{p.name}</td>
+                    <td className="py-1.5 pl-2 text-right whitespace-nowrap tabular-nums">{formatBRL(p.price)}</td>
+                    <td className="py-1.5 pl-2 text-right whitespace-nowrap tabular-nums">{formatBRL(p.cost)}</td>
+                    <td className="py-1.5 pl-2 text-right font-semibold whitespace-nowrap tabular-nums">
                       <span className="inline-flex items-center gap-1">
                         {m < 30 && <AlertTriangle className="size-3.5 text-warning-soft-foreground" aria-label="Margem baixa" />}
                         {m}%
@@ -326,6 +326,7 @@ export function HeatmapCard({ heat, range }: { heat: HeatCell[] | null; range: n
               ))}
             </div>
           </div>
+          <p className="mt-1 text-xs text-muted-foreground sm:hidden">Deslize para o lado para ver todos os horários.</p>
           <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
             Menos
             <span className="size-3 rounded-[3px] bg-surface-2" />

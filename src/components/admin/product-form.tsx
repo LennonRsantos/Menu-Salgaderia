@@ -238,7 +238,7 @@ function ProductForm({
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Nome" error={errors.name} className="sm:col-span-2">
             {(p) => <Input {...p} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="Ex.: Coxinha de frango" />}
           </Field>

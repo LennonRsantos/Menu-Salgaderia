@@ -181,7 +181,7 @@ function RecipeForm({
   return (
     <form onSubmit={submit} noValidate className="flex min-h-full flex-col">
       <div className="flex-1 space-y-6 px-5 py-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Rendimento da receita" hint="Quantas unidades a receita faz. Use 1 para informar tudo por unidade.">
             {(p) => (
               <div className="flex items-center gap-2">

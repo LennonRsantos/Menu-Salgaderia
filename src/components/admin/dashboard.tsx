@@ -9,6 +9,7 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, LabelList, ResponsiveCon
 import { toast } from "sonner";
 import { Card, EmptyState, Skeleton } from "@/components/ui/misc";
 import { cn, formatBRL, formatCompactBRL } from "@/lib/format";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { useMounted } from "@/lib/use-mounted";
 import { getDashboard, type DashboardResult, type DayPoint, type Metrics, type TopProduct } from "@/actions/dashboard";
 import { CashCard, CustomersCard, DataTable, Delta, HeatmapCard, NeighborhoodsCard, ProfitCard, TimesCard } from "./dashboard-sections";
@@ -53,6 +54,8 @@ export function Dashboard() {
 function DashboardContent() {
   const { resolvedTheme } = useTheme();
   const mounted = useMounted();
+  // narrower name axis in the "most sold" chart on phones
+  const isPhone = useMediaQuery("(max-width: 639px)");
   const base = CHART[resolvedTheme === "dark" ? "dark" : "light"];
   // read on each render: a light/dark switch re-renders through resolvedTheme
   const colors = Object.fromEntries(
@@ -117,7 +120,7 @@ function DashboardContent() {
         </div>
       )}
 
-      <div className="grid gap-3 px-4 sm:grid-cols-2 sm:px-6 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 px-4 sm:px-6 xl:grid-cols-4">
         <Kpi
           icon={CircleDollarSign}
           label="Vendas hoje"
@@ -170,7 +173,7 @@ function DashboardContent() {
         </div>
       )}
 
-      <div className="grid gap-4 px-4 sm:px-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 px-4 sm:px-6 xl:grid-cols-2">
         <CashCard />
         <ProfitCard profit={extra?.profit ?? null} range={range} />
       </div>
@@ -192,7 +195,7 @@ function DashboardContent() {
         ))}
       </div>
 
-      <div className="grid gap-4 px-4 sm:px-6 xl:grid-cols-[1.6fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 px-4 sm:px-6 xl:grid-cols-[1.6fr_1fr]">
         <Card className="p-5">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
             <div>
@@ -283,11 +286,14 @@ function DashboardContent() {
                     <YAxis
                       type="category"
                       dataKey="product_name"
-                      width={130}
+                      width={isPhone ? 96 : 130}
                       tick={{ fill: colors.text, fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(v: string) => (v.length > 18 ? `${v.slice(0, 17)}…` : v)}
+                      tickFormatter={(v: string) => {
+                        const max = isPhone ? 13 : 18;
+                        return v.length > max ? `${v.slice(0, max - 1)}…` : v;
+                      }}
                     />
                     <Tooltip
                       cursor={{ fill: colors.grid, fillOpacity: 0.4 }}
@@ -312,12 +318,12 @@ function DashboardContent() {
         </Card>
       </div>
 
-      <div className="grid gap-4 px-4 sm:px-6 xl:grid-cols-[1.6fr_1fr]">
+      <div className="grid grid-cols-1 gap-4 px-4 sm:px-6 xl:grid-cols-[1.6fr_1fr]">
         <HeatmapCard heat={extra?.heat ?? null} range={range} />
         <TimesCard times={extra?.times ?? null} range={range} />
       </div>
 
-      <div className="grid gap-4 px-4 sm:px-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 px-4 sm:px-6 xl:grid-cols-2">
         <CustomersCard customers={extra?.customers ?? null} storeName={extra?.store_name ?? "loja"} range={range} />
         <NeighborhoodsCard neighborhoods={extra?.neighborhoods ?? null} range={range} />
       </div>
@@ -341,17 +347,18 @@ function Kpi({
   delta?: React.ReactNode;
 }) {
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        <span className="grid size-8 place-items-center rounded-md bg-primary-soft text-primary-soft-foreground">
+    // two per row on phones, so it stays compact there
+    <Card className="min-w-0 p-3 sm:p-4">
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
+        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary-soft text-primary-soft-foreground sm:size-8">
           <Icon className="size-4" />
         </span>
       </div>
       {value === null ? (
-        <Skeleton className="mt-3 h-8 w-32" />
+        <Skeleton className="mt-3 h-8 w-full max-w-32" />
       ) : (
-        <p className="mt-2 text-2xl font-bold tracking-tight tabular-nums">{value}</p>
+        <p className="mt-1.5 text-xl font-bold tracking-tight whitespace-nowrap tabular-nums sm:mt-2 sm:text-2xl">{value}</p>
       )}
       <p className="mt-0.5 text-xs text-muted-foreground">{hint ?? " "}</p>
       {delta && <div className="mt-2">{delta}</div>}

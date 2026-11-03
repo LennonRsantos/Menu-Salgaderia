@@ -218,12 +218,14 @@ export function MenuManager() {
                       </div>
                     </div>
                     <div className="flex w-full items-center justify-between gap-1 sm:w-auto sm:justify-end">
-                      <Switch checked={p.is_visible} onCheckedChange={(v) => toggle(p, "is_visible", v)} label="Visível" className="pr-2" />
-                      <Switch checked={p.is_available} onCheckedChange={(v) => toggle(p, "is_available", v)} label="Disponível" className="pr-2" />
+                      <Switch checked={p.is_visible} onCheckedChange={(v) => toggle(p, "is_visible", v)} label="Visível" className="sm:pr-2" />
+                      <Switch checked={p.is_available} onCheckedChange={(v) => toggle(p, "is_available", v)} label="Disponível" className="sm:pr-2" />
+                      {/* phones: smaller icon buttons so the row fits at 360 px */}
                       <div className="flex">
                         <Button
                           variant="ghost"
-                          size="icon"
+                          size="icon-sm"
+                          className="sm:size-11 sm:rounded-md"
                           onClick={() => {
                             setEditing(p);
                             setFormOpen(true);
@@ -232,7 +234,7 @@ export function MenuManager() {
                         >
                           <Pencil className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setToDelete(p)} aria-label={`Excluir ${p.name}`}>
+                        <Button variant="ghost" size="icon-sm" className="sm:size-11 sm:rounded-md" onClick={() => setToDelete(p)} aria-label={`Excluir ${p.name}`}>
                           <Trash2 className="size-4" />
                         </Button>
                       </div>

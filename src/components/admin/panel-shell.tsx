@@ -225,7 +225,7 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
         )}
       </aside>
 
-      <div className="flex min-w-0 flex-col md:pl-20 lg:pl-0">
+      <div className="flex min-w-0 flex-col overflow-x-clip md:pl-20 lg:pl-0">
         <main id="conteudo" tabIndex={-1} className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] outline-none md:pb-0">
           {profile ? (
             <ProfileContext value={profile}>
@@ -251,7 +251,7 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
           ) : (
             <div className="space-y-4 p-4 sm:p-6">
               <Skeleton className="h-8 w-48" />
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {Array.from({ length: 4 }).map((_, i) => (
                   <Skeleton key={i} className="h-28" />
                 ))}

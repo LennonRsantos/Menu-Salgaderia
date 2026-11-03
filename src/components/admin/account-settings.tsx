@@ -140,7 +140,7 @@ function EmailCard() {
             Hoje você entra com <strong className="font-semibold break-all text-foreground">{profile.email}</strong>.
           </p>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Novo e-mail">
             {(p) => (
               <Input
@@ -224,7 +224,7 @@ function PasswordCard() {
           <p className="text-sm text-muted-foreground">Ao trocar, os outros aparelhos conectados saem da conta. Este continua conectado.</p>
         </div>
         <PasswordField label="Senha atual" autoComplete="current-password" value={form.current} onChange={set("current")} className="sm:max-w-[calc(50%-0.5rem)]" />
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <PasswordField label="Nova senha" hint="Mínimo de 8 caracteres." autoComplete="new-password" value={form.next} onChange={set("next")} />
           <PasswordField label="Repita a nova senha" autoComplete="new-password" value={form.repeat} onChange={set("repeat")} />
         </div>

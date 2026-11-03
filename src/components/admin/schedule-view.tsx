@@ -125,7 +125,7 @@ export function ScheduleView() {
           />
         ) : (
           days.map(([date, list]) => (
-            <section key={date} aria-labelledby={`day-${date}`} className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
+            <section key={date} aria-labelledby={`day-${date}`} className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1.2fr]">
               <div className="lg:col-span-2 flex flex-wrap items-baseline gap-x-3">
                 <h2 id={`day-${date}`} className="text-lg font-bold">
                   {dayTitle(date, today, tomorrow)}

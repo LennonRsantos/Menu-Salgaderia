@@ -94,7 +94,7 @@ export function ExpensesTab({
   );
 
   return (
-    <div className="grid gap-6 px-4 sm:px-6 xl:grid-cols-[1fr_360px]">
+    <div className="grid grid-cols-1 gap-6 px-4 sm:px-6 xl:grid-cols-[1fr_360px]">
       <div className="min-w-0 space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-1">
