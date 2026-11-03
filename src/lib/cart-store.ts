@@ -121,3 +121,11 @@ export function rememberOrder(order: RecentOrder) {
     // ignore
   }
 }
+
+export function forgetOrder(token: string) {
+  try {
+    localStorage.setItem(ORDERS_KEY, JSON.stringify(loadRecentOrders().filter((o) => o.token !== token)));
+  } catch {
+    // ignore
+  }
+}

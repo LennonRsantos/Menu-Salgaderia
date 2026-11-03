@@ -5,14 +5,13 @@ import { useEffect, useState } from "react";
 import { getMyAccount } from "@/actions/customer";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { loadRecentOrders } from "@/lib/cart-store";
-import { useMounted } from "@/lib/use-mounted";
+import { forgetOrder, loadRecentOrders, type RecentOrder } from "@/lib/cart-store";
 import { useReservation } from "@/lib/reservation-store";
 import { useStoreStatus } from "@/lib/use-store-status";
 import { cn, formatBRL, mapsLink } from "@/lib/format";
 import { etaLabel } from "@/lib/hours";
 import { DEFAULT_THEME, type ActiveTheme } from "@/lib/themes";
-import type { StoreSettings } from "@/types";
+import type { OrderStatus, StoreSettings } from "@/types";
 import { FestiveBanner, FestiveEffects } from "./festive-decor";
 
 export const DEFAULT_STORE_NAME = "Menu Salgaderia e Confeitaria";
@@ -44,8 +43,33 @@ export function StoreLogo({ settings, size = 56 }: { settings: StoreSettings | n
 }
 
 export function StoreHeader({ settings, theme = DEFAULT_THEME }: { settings: StoreSettings | null; theme?: ActiveTheme }) {
-  const mounted = useMounted();
-  const recent = mounted ? (loadRecentOrders()[0] ?? null) : null;
+  const [recent, setRecent] = useState<RecentOrder | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    // the shortcut is only for an order still on its way; finished ones leave the list
+    (async () => {
+      for (const order of loadRecentOrders()) {
+        const res = await fetch(`/api/track/${order.token}`, { cache: "no-store" }).catch(() => null);
+        if (cancelled || !res) return;
+        if (res.status === 404) {
+          forgetOrder(order.token);
+          continue;
+        }
+        if (!res.ok) return;
+        const { order: tracked } = (await res.json()) as { order: { status: OrderStatus } };
+        if (cancelled) return;
+        if (tracked.status === "completed" || tracked.status === "cancelled") {
+          forgetOrder(order.token);
+          continue;
+        }
+        setRecent(order);
+        return;
+      }
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const status = useStoreStatus(settings);
   const openReservation = useReservation((s) => s.setOpen);
