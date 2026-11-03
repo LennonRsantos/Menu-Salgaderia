@@ -1,7 +1,9 @@
 "use server";
 
 import { findStaff, requireStaff } from "@/lib/auth";
+import { query } from "@/lib/db";
 import { neonAuth } from "@/lib/neon-auth";
+import { pinsError } from "@/lib/nav";
 import type { Profile } from "@/types";
 
 export type SignInResult = { ok: true } | { ok: false; error: string };
@@ -55,5 +57,19 @@ export async function getMyProfile(): Promise<{ profile: Profile | null; error?:
     if (message.startsWith("Sessão") || message.startsWith("Sua conta")) return { profile: null };
     console.error("getMyProfile failed", e);
     return { profile: null, error: "Não foi possível conectar ao banco de dados. Verifique a internet e o .env.local." };
+  }
+}
+
+/** Saves the signed-in person's pinned pages; null goes back to the defaults. Only their own row. */
+export async function saveNavPins(keys: string[] | null): Promise<SignInResult> {
+  try {
+    const profile = await requireStaff();
+    const pins = keys === null ? null : (Array.isArray(keys) ? keys : []).map(String);
+    const error = pins && pinsError(pins, profile.role);
+    if (error) return { ok: false, error };
+    await query("update staff set nav_pins = $2 where user_id = $1", [profile.id, pins]);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Não foi possível salvar os atalhos." };
   }
 }

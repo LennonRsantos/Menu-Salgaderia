@@ -13,6 +13,7 @@ import {
   LogOut,
   Monitor,
   Moon,
+  Pin,
   Settings,
   ShieldCheck,
   Sun,
@@ -24,12 +25,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, use, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getMyProfile, signOutStaff } from "@/actions/auth";
-import { buttonClasses } from "@/components/ui/button";
+import { getMyProfile, saveNavPins, signOutStaff } from "@/actions/auth";
+import { Button, buttonClasses } from "@/components/ui/button";
 import { EmptyState, Skeleton } from "@/components/ui/misc";
 import { Sheet } from "@/components/ui/sheet";
+import { Switch } from "@/components/ui/switch";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/format";
+import { canSee, MAX_PINS, resolvePins, type NavKey } from "@/lib/nav";
 import { useIsDesktop } from "@/lib/use-media-query";
 import { useMounted } from "@/lib/use-mounted";
 import type { Profile } from "@/types";
@@ -44,26 +47,26 @@ export function useProfile() {
 }
 
 type NavItem = {
+  key: NavKey;
   href: string;
   label: string;
   /** Label under the icon on phones and tablets. */
   short?: string;
   icon: typeof LayoutDashboard;
-  adminOnly: boolean;
-  /** "main": the daily pages, always in the bottom bar / rail. "more": management, behind "Mais". */
-  group: "main" | "more";
 };
 
+// Who may open each page is in src/lib/nav.ts; each person picks which ones sit
+// in the phone bar / tablet rail, the rest go behind "Mais".
 const NAV: NavItem[] = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, adminOnly: true, group: "more" },
-  { href: "/admin/pedidos", label: "Pedidos", icon: ClipboardList, adminOnly: false, group: "main" },
-  { href: "/admin/encomendas", label: "Encomendas", short: "Agenda", icon: CalendarClock, adminOnly: false, group: "main" },
-  { href: "/admin/cardapio", label: "Cardápio", icon: UtensilsCrossed, adminOnly: false, group: "main" },
-  { href: "/admin/estoque", label: "Estoque", icon: Boxes, adminOnly: false, group: "main" },
-  { href: "/admin/custos", label: "Custos", icon: Calculator, adminOnly: true, group: "more" },
-  { href: "/admin/clientes", label: "Clientes", icon: Contact, adminOnly: true, group: "more" },
-  { href: "/admin/equipe", label: "Equipe", icon: Users, adminOnly: true, group: "more" },
-  { href: "/admin/configuracoes", label: "Loja", icon: Settings, adminOnly: true, group: "more" },
+  { key: "dashboard", href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { key: "pedidos", href: "/admin/pedidos", label: "Pedidos", icon: ClipboardList },
+  { key: "encomendas", href: "/admin/encomendas", label: "Encomendas", short: "Agenda", icon: CalendarClock },
+  { key: "cardapio", href: "/admin/cardapio", label: "Cardápio", icon: UtensilsCrossed },
+  { key: "estoque", href: "/admin/estoque", label: "Estoque", icon: Boxes },
+  { key: "custos", href: "/admin/custos", label: "Custos", icon: Calculator },
+  { key: "clientes", href: "/admin/clientes", label: "Clientes", icon: Contact },
+  { key: "equipe", href: "/admin/equipe", label: "Equipe", icon: Users },
+  { key: "loja", href: "/admin/configuracoes", label: "Loja", icon: Settings },
 ];
 
 /** The store logo set in the panel; the default brand icon until one is set. */
@@ -132,9 +135,26 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
     router.replace("/admin/login");
   }
 
-  const nav = NAV.filter((n) => !n.adminOnly || profile?.role === "admin");
-  const main = nav.filter((n) => n.group === "main");
-  const more = nav.filter((n) => n.group === "more");
+  const role = profile?.role ?? "staff";
+  const nav = NAV.filter((n) => canSee(n.key, role));
+  const pins = resolvePins(profile?.nav_pins, role);
+  const main = nav.filter((n) => pins.includes(n.key));
+  const more = nav.filter((n) => !pins.includes(n.key));
+
+  // the bar changes at once; a failed save puts the previous pins back
+  async function savePins(next: NavKey[] | null) {
+    if (!profile) return false;
+    const previous = profile.nav_pins;
+    setProfile({ ...profile, nav_pins: next });
+    const result = await saveNavPins(next).catch(() => ({ ok: false as const, error: "Sem conexão. Tente novamente." }));
+    if (!result.ok) {
+      setProfile((p) => (p ? { ...p, nav_pins: previous } : p));
+      toast.error(result.error);
+      return false;
+    }
+    toast.success("Atalhos salvos.");
+    return true;
+  }
   const isActive = (href: string) => (href === "/admin" ? pathname === "/admin" : pathname.startsWith(href));
   const moreActive = more.some((n) => isActive(n.href));
 
@@ -244,7 +264,19 @@ export function PanelShell({ logoUrl, children }: { logoUrl: string | null; chil
         )}
       </div>
 
-      {profile && <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} items={more} isActive={isActive} profile={profile} onSignOut={signOut} />}
+      {profile && (
+        <MoreSheet
+          open={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          items={more}
+          all={nav}
+          pins={pins}
+          onSavePins={savePins}
+          isActive={isActive}
+          profile={profile}
+          onSignOut={signOut}
+        />
+      )}
     </div>
   );
 }
@@ -278,11 +310,14 @@ function NavTab({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-/** "Mais": management pages, the public menu, theme and sign out, for phones and tablets. */
+/** "Mais": the pages not pinned, choosing the pins, the public menu, theme and sign out, for phones and tablets. */
 function MoreSheet({
   open,
   onClose,
   items,
+  all,
+  pins,
+  onSavePins,
   isActive,
   profile,
   onSignOut,
@@ -290,11 +325,74 @@ function MoreSheet({
   open: boolean;
   onClose: () => void;
   items: NavItem[];
+  all: NavItem[];
+  pins: NavKey[];
+  onSavePins: (next: NavKey[] | null) => Promise<boolean>;
   isActive: (href: string) => boolean;
   profile: Profile;
   onSignOut: () => void;
 }) {
   const row = "flex h-12 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold transition-colors hover:bg-surface-2";
+  // the pins being chosen; null = not editing
+  const [draft, setDraft] = useState<NavKey[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  // closing the sheet (or navigating away) leaves the editor
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) setDraft(null);
+  }
+  async function save(next: NavKey[] | null) {
+    setSaving(true);
+    const ok = await onSavePins(next);
+    setSaving(false);
+    if (ok) setDraft(null);
+  }
+
+  if (draft) {
+    const full = draft.length >= MAX_PINS;
+    return (
+      <Sheet open={open} onClose={onClose} title="Escolher atalhos" size="sm">
+        <div className="space-y-4 px-5 pt-1 pb-5">
+          <p className="text-sm text-muted-foreground">
+            Fixe até {MAX_PINS} páginas na barra do celular e do tablet. As outras ficam em &quot;Mais&quot;.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {all.map((n) => {
+              const on = draft.includes(n.key);
+              return (
+                <li key={n.key} className="flex items-center gap-3 px-3">
+                  <n.icon className="size-5 shrink-0 text-muted-foreground" />
+                  <Switch
+                    checked={on}
+                    disabled={(!on && full) || (on && draft.length === 1)}
+                    onCheckedChange={(v) => setDraft(v ? [...draft, n.key] : draft.filter((k) => k !== n.key))}
+                    label={n.label}
+                    className="flex-1 flex-row-reverse justify-between"
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            {draft.length} de {MAX_PINS} atalhos{full ? ". Desmarque um para trocar." : "."}
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row-reverse">
+            <Button onClick={() => save(draft)} loading={saving} className="flex-1">
+              Salvar atalhos
+            </Button>
+            <Button variant="outline" onClick={() => save(null)} disabled={saving} className="flex-1">
+              Restaurar padrão
+            </Button>
+          </div>
+          <button type="button" onClick={() => setDraft(null)} className="w-full text-center text-sm font-semibold text-muted-foreground hover:underline">
+            Voltar
+          </button>
+        </div>
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet open={open} onClose={onClose} title="Menu" size="sm">
       <div className="space-y-4 px-5 pt-1 pb-5">
@@ -310,8 +408,8 @@ function MoreSheet({
         </div>
 
         {items.length > 0 && (
-          <nav aria-label="Gestão">
-            <p className="px-3 pb-1 text-xs font-bold tracking-wide text-muted-foreground uppercase">Gestão</p>
+          <nav aria-label="Outras páginas">
+            <p className="px-3 pb-1 text-xs font-bold tracking-wide text-muted-foreground uppercase">Outras páginas</p>
             {items.map((n) => (
               <Link
                 key={n.href}
@@ -329,6 +427,11 @@ function MoreSheet({
         )}
 
         <div className="space-y-1 border-t border-border pt-3">
+          <button type="button" onClick={() => setDraft(pins)} className={row}>
+            <Pin className="size-5 text-muted-foreground" />
+            <span className="flex-1 text-left">Escolher atalhos</span>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </button>
           <Link href="/" target="_blank" onClick={onClose} className={row}>
             <ExternalLink className="size-5 text-muted-foreground" />
             <span className="flex-1">Ver cardápio público</span>

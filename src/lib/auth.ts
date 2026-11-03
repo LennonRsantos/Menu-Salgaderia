@@ -3,10 +3,26 @@ import type { Profile } from "@/types";
 import { iso, query } from "./db";
 import { neonAuth } from "./neon-auth";
 
-type StaffRow = { user_id: string; full_name: string; email: string; role: Profile["role"]; active: boolean; created_at: Date };
+type StaffRow = {
+  user_id: string;
+  full_name: string;
+  email: string;
+  role: Profile["role"];
+  active: boolean;
+  created_at: Date;
+  nav_pins?: string[] | null;
+};
 
 export function profileFromRow(r: StaffRow): Profile {
-  return { id: r.user_id, full_name: r.full_name, email: r.email, role: r.role, active: r.active, created_at: iso(r.created_at) ?? "" };
+  return {
+    id: r.user_id,
+    full_name: r.full_name,
+    email: r.email,
+    role: r.role,
+    active: r.active,
+    created_at: iso(r.created_at) ?? "",
+    nav_pins: r.nav_pins ?? null,
+  };
 }
 
 export async function findStaff(userId: string) {

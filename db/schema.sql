@@ -325,3 +325,7 @@ create table if not exists rate_hits (
   at  timestamptz not null default now()
 );
 create index if not exists rate_hits_key_idx on rate_hits (key, at);
+
+-- Pages each person pins to the phone bar and tablet rail (src/lib/nav.ts);
+-- null = the default ones.
+alter table staff add column if not exists nav_pins text[];
